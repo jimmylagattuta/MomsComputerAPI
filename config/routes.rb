@@ -1,6 +1,7 @@
-# config/routes.rb
 Rails.application.routes.draw do
   namespace :v1 do
+    get "me", to: "me#show"
+
     namespace :auth do
       post :signup, to: "auth#signup"
       post :login,  to: "auth#login"

@@ -3,6 +3,8 @@ module V1
   class AskMomController < ApplicationController
     include JwtAuth
 
+    before_action :authenticate_user!
+
     def create
       text = params.require(:text).to_s
       conversation_id = params[:conversation_id]

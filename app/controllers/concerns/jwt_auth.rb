@@ -4,10 +4,6 @@ module JwtAuth
 
   JWT_ALG = "HS256".freeze
 
-  included do
-    before_action :authenticate_user!
-  end
-
   def encode_jwt(payload, exp: 30.days.from_now)
     secret = Rails.application.credentials.jwt_secret || ENV["JWT_SECRET"]
     raise "Missing JWT secret" if secret.blank?
