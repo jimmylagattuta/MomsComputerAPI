@@ -198,13 +198,10 @@ class GreetingDetector
     curm = "#{curm} #{pick(rng, SOCAL_FLAVOR)}" if rng.rand < 0.22
 
     summary = format_summary(rng, opener: opener, curmudgeon: curm, safety: safety, question: question)
-
     steps = build_steps(rng)
 
     # Small extra “alive” touch
-    if rng.rand < 0.18
-      summary = "#{summary} #{pick(rng, EMOJI)}"
-    end
+    summary = "#{summary} #{pick(rng, EMOJI)}" if rng.rand < 0.18
 
     {
       risk_level: "low",

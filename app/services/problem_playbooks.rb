@@ -261,9 +261,7 @@ class ProblemPlaybooks
   # ---------- helpers ----------
   def self.finish(rng, summary, steps, prompt_version, escalate: false, confidence: 0.88)
     # tiny “alive” variation: optional tag line
-    if rng.rand < 0.18
-      summary = "#{summary} (We’ll do it clean.)"
-    end
+    summary = "#{summary} (We’ll do it clean.)" if rng.rand < 0.18
 
     {
       risk_level: escalate ? "high" : "medium",

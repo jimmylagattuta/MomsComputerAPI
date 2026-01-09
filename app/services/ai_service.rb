@@ -71,9 +71,7 @@ class AiService
         raw_text: t_raw
       )
 
-      if resp
-        return attach_llm_recommendation(resp, text: t_raw)
-      end
+      return attach_llm_recommendation(resp, text: t_raw) if resp
     end
 
     # 4) Default: helpful troubleshooting guidance (also varied)
@@ -133,7 +131,7 @@ class AiService
   # LLM recommendation (NO LLM CALL)
   # ----------------------------
   #
-  # This is dev-focused routing metadata so we can:
+  # Dev-focused routing metadata so we can:
   # - pop an alert in the app ("LLM would trigger: reason")
   # - log it
   # - later, swap in a real provider only when warranted
@@ -167,7 +165,7 @@ class AiService
     # Big blob -> LLM helps summarization/extraction
     reasons << "long_message" if t.length >= 400
 
-    # Ambiguous: short-ish but not confidently handled
+    # Ambiguous: not confidently handled
     reasons << "low_confidence" if confidence < 0.72
 
     # Troubleshooting domains where reasoning helps (cheap heuristic)
@@ -217,4 +215,6 @@ class AiService
   end
 
   def self.includes_any?(t, arr)
-    arr.any? { |x| t.i
+    arr.any? { |x| t.include?(x) }
+  end
+end
