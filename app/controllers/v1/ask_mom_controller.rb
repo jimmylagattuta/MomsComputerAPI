@@ -6,10 +6,18 @@ module V1
     before_action :authenticate_user!
 
     def create
-      text = params.require(:text).to_s
+      # ✅ Accept either payload shape:
+      # - { "text": "Hi" }
+      # - { "ask_mom": { "text": "Hi" } }
+      text =
+        if params[:text].present?
+          params[:text].to_s
+        else
+          params.require(:ask_mom).permit(:text).fetch(:text).to_s
+        end
+
       conversation_id = params[:conversation_id]
 
-      # Create or reuse conversation
       conversation =
         if conversation_id.present?
           current_user.conversations.find(conversation_id)
@@ -22,7 +30,7 @@ module V1
           )
         end
 
-      # Guardrail: redact if sensitive data appears
+      # Store user message (redacted if needed)
       if SensitiveDataRedactor.contains_sensitive?(text)
         redacted = SensitiveDataRedactor.redact(text)
         reasons = SensitiveDataRedactor.reasons(text)
@@ -30,7 +38,7 @@ module V1
         user_message = conversation.messages.create!(
           sender_type: "user",
           sender_id: current_user.id,
-          content: redacted, # store only redacted
+          content: redacted,
           content_type: "text",
           risk_level: "unknown",
           metadata: { redacted: true, redaction_reasons: reasons }
@@ -52,64 +60,91 @@ module V1
         )
       end
 
-      # Call AI (use stored content, which may be redacted)
-      ai_result = AiService.call(user: current_user, text: user_message.content, context: nil)
+      # ✅ Pass context (enables greeting variation + future routing)
+      ai = AiService.call(
+        user: current_user,
+        text: user_message.content,
+        context: { conversation_id: conversation.id }
+      )
 
-      # Persist AI message
+      # ✅ Coerce/guarantee output (prevents blank bubbles)
+      summary = ai[:summary].to_s.strip
+      summary = "Alright—tell me what you’re seeing on the screen." if summary.empty?
+
+      steps =
+        case ai[:steps]
+        when Array
+          ai[:steps].map { |s| s.to_s.strip }.reject(&:empty?)
+        else
+          []
+        end
+
+      if steps.empty?
+        steps = [
+          "What device is it (iPhone/Android/Mac/Windows)?",
+          "What app or website are you in?",
+          "What does the screen say (exact words), and is anyone asking for money, codes, or remote access?"
+        ]
+      end
+
+      risk_level = ai[:risk_level].to_s.presence || "medium"
+      escalate_suggested = !!ai[:escalate_suggested]
+
+      confidence = ai[:confidence].to_f
+      confidence = [[confidence, 0.0].max, 1.0].min
+
+      model = ai[:model].to_s.presence || "stub"
+      prompt_version = ai[:prompt_version].to_s.presence || "v1"
+
+      # ✅ Store formatted message content too (nice for history/debug)
+      content_text =
+        if steps.any?
+          ([summary, "", *steps.each_with_index.map { |s, i| "#{i + 1}. #{s}" }]).join("\n")
+        else
+          summary
+        end
+
+      # Persist AI message with TOP-LEVEL metadata keys
       ai_message = conversation.messages.create!(
         sender_type: "ai",
         sender_id: nil,
-        content: build_ai_message_text(ai_result),
+        content: content_text,
         content_type: "text",
-        risk_level: ai_result[:risk_level],
-        ai_model: "stub",
-        ai_prompt_version: "v1",
-        ai_confidence: ai_result[:confidence],
-        metadata: { structured: ai_result.except(:confidence) }
+        risk_level: risk_level,
+        ai_model: model,
+        ai_prompt_version: prompt_version,
+        ai_confidence: confidence,
+        metadata: {
+          "summary" => summary,
+          "steps" => steps,
+          "escalate_suggested" => escalate_suggested,
+          "confidence" => confidence,
+          # Optional dev routing metadata (won't break older clients)
+          "llm_recommended" => !!ai[:llm_recommended],
+          "llm_reason" => ai[:llm_reason].to_s
+        }
       )
 
-      # Update conversation risk + timestamps
+      # Keep conversation status/risk updated (NO tickets)
       conversation.update!(
-        risk_level: ai_result[:risk_level],
+        risk_level: ai_message.risk_level,
         last_message_at: Time.current,
-        status: ai_result[:escalate_suggested] ? "escalated" : conversation.status
+        status: escalate_suggested ? "escalated" : conversation.status
       )
 
-      # Auto-create escalation ticket on high risk (optional but recommended)
-      ticket = nil
-      if ai_result[:escalate_suggested]
-        ticket = EscalationTicket.create!(
-          user: current_user,
-          conversation: conversation,
-          status: "open",
-          priority: "high",
-          reason: "high_risk_scam",
-          summary: ai_result[:summary]
-        )
-      end
-
+      # ✅ Required structured payload (reliable keys)
       render json: {
         conversation_id: conversation.id,
-        user_message_id: user_message.id,
-        ai_message_id: ai_message.id,
-        risk_level: ai_result[:risk_level],
-        summary: ai_result[:summary],
-        steps: ai_result[:steps],
-        escalate_suggested: ai_result[:escalate_suggested],
-        escalation_ticket_id: ticket&.id
+        message_id: ai_message.id,
+        risk_level: ai_message.risk_level,
+        summary: ai_message.metadata["summary"],
+        steps: ai_message.metadata["steps"],
+        escalate_suggested: ai_message.metadata["escalate_suggested"],
+        confidence: ai_message.metadata["confidence"],
+        # Optional dev routing metadata (safe add)
+        llm_recommended: ai_message.metadata["llm_recommended"],
+        llm_reason: ai_message.metadata["llm_reason"]
       }, status: :ok
-    end
-
-    private
-
-    def build_ai_message_text(result)
-      lines = []
-      lines << result[:summary].to_s
-      lines << ""
-      result[:steps].to_a.each_with_index do |s, i|
-        lines << "#{i + 1}. #{s}"
-      end
-      lines.join("\n")
     end
   end
 end
