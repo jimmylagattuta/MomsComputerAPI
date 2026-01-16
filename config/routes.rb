@@ -10,6 +10,9 @@ Rails.application.routes.draw do
 
     post "ask_mom", to: "ask_mom#create"
 
+    # ✅ Conversation history (Ask Mom drawer)
+    resources :conversations, only: [:index, :show]
+
     resources :messages, only: [] do
       post :attachments, on: :member, to: "attachments#create"
     end

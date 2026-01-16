@@ -79,7 +79,7 @@ module V1
         return
       end
 
-      # ✅ Direct LLM call (LLM owns the assistant voice)
+      # ✅ Direct LLM call (LLM owns the assistant voice + gives us a smart title)
       ai = ask_mom_llm(
         user_text: user_message.content,
         user: current_user,
@@ -100,6 +100,10 @@ module V1
 
       model = ai[:model].to_s.presence || "unknown"
       prompt_version = ai[:prompt_version].to_s.presence || "llm_v1"
+
+      # ✅ LLM-generated title (safe, short). We update this repeatedly as the convo evolves.
+      title = ai[:title].to_s.strip
+      title = sanitize_title(title)
 
       # ✅ If the LLM fails to provide required fields, treat as upstream failure.
       # (No Rails-authored assistant message.)
@@ -132,15 +136,26 @@ module V1
           "summary" => summary,
           "steps" => steps,
           "escalate_suggested" => escalate_suggested,
-          "confidence" => confidence
+          "confidence" => confidence,
+          "title" => title
         }
       )
 
-      conversation.update!(
+      # ✅ Update conversation: risk + status + last_message_at + summary-as-title
+      # We use conversations.summary as the "title" (you already have this column).
+      #
+      # Behavior:
+      # - If user only says "hello": title will be "Getting started" / "Quick question" etc.
+      # - Once they explain, the LLM will return a better title and we overwrite it.
+      # - We always overwrite unless title is blank.
+      update_hash = {
         risk_level: ai_message.risk_level,
         last_message_at: Time.current,
         status: escalate_suggested ? "escalated" : conversation.status
-      )
+      }
+      update_hash[:summary] = title if title.present?
+
+      conversation.update!(update_hash)
 
       render json: {
         conversation_id: conversation.id,
@@ -149,11 +164,31 @@ module V1
         summary: ai_message.metadata["summary"],
         steps: ai_message.metadata["steps"],
         escalate_suggested: ai_message.metadata["escalate_suggested"],
-        confidence: ai_message.metadata["confidence"]
+        confidence: ai_message.metadata["confidence"],
+        conversation_title: conversation.summary
       }, status: :ok
     end
 
     private
+
+    # Keep titles tight and display-friendly (no weird punctuation, no paragraphs).
+    def sanitize_title(s)
+      t = s.to_s.strip
+      return "" if t.empty?
+
+      # One line only
+      t = t.gsub(/\s+/, " ")
+      t = t.gsub(/[\r\n\t]/, " ").strip
+
+      # Remove surrounding quotes
+      t = t.gsub(/\A["'“”‘’]+/, "").gsub(/["'“”‘’]+\z/, "")
+
+      # Hard cap length
+      t = t[0, 48] if t.length > 48
+
+      # Avoid empty after stripping
+      t
+    end
 
     # Builds a compact transcript of the last N messages for the LLM.
     # Keeps cost bounded + avoids token avalanches.
@@ -226,6 +261,10 @@ module V1
 
         Return exactly these keys:
         - risk_level: "low" | "medium" | "high"
+        - title: a short, intuitive conversation title (3–7 words). No quotes. No punctuation at the end.
+                 If the user has only greeted (hi/hello), use a generic title like:
+                 "Getting started" or "Quick question".
+                 IMPORTANT: As the user explains more later, you SHOULD update the title to be more specific.
         - summary: 1-2 sentences (ALWAYS present). Include the ONE question here if you need info.
         - steps: array of 0-4 short action strings (“Open Settings…”, “Turn on Airplane mode…”)
         - escalate_suggested: boolean
@@ -240,8 +279,6 @@ module V1
         GREETINGS:
         - If the user only says “hi/hello”, respond briefly and ask what device they’re on (ONE question).
       TXT
-
-
 
       # Include last few turns (this is the “memory”)
       ctx = conversation_context_text(conversation, turns: 10, max_chars: 4500)
@@ -280,6 +317,7 @@ module V1
 
       {
         risk_level: parsed["risk_level"].to_s,
+        title: parsed["title"].to_s,
         summary: parsed["summary"].to_s,
         steps: parsed["steps"].is_a?(Array) ? parsed["steps"] : [],
         escalate_suggested: !!parsed["escalate_suggested"],
