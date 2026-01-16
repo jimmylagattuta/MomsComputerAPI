@@ -262,15 +262,20 @@ module V1
         Return exactly these keys:
         - risk_level: "low" | "medium" | "high"
         - title: a short, intuitive conversation title (3–7 words). No quotes. No punctuation at the end.
-                 If the user has only greeted (hi/hello), use a generic title like:
-                 "Getting started" or "Quick question".
-                 IMPORTANT: As the user explains more later, you SHOULD update the title to be more specific.
+                If the user has only greeted (hi/hello), use a generic title like:
+                "Getting started" or "Quick question".
+                IMPORTANT: As the user explains more later, you SHOULD update the title to be more specific.
         - summary: 1-2 sentences (ALWAYS present). Include the ONE question here if you need info.
         - steps: array of 0-4 short action strings (“Open Settings…”, “Turn on Airplane mode…”)
         - escalate_suggested: boolean
         - confidence: number 0..1
 
         SAFETY RULES:
+        - PRIVACY: Never ask for passwords, login codes, SSN, or bank/credit card numbers.
+        - PRIVACY: If the user offers any of those, tell them NOT to share them and to remove/redact them.
+        - REMINDER: In scam-risk situations (money/codes/links/remote access) include a short reminder like:
+          “Don’t share passwords, login codes, SSN, or bank numbers. We will never ask.”
+          (Keep it brief; don’t over-repeat on low-risk tech questions.)
         - If money, codes, gift cards, crypto, "refund", bank transfer, or remote access is involved => risk_level MUST be "high".
         - If user already paid/clicked/shared codes/installed remote access => escalate_suggested MUST be true.
         - If it’s a scam scenario, include “do this to be safe” actions (close tab, disconnect call, check bank app from official app, etc.).
@@ -279,6 +284,7 @@ module V1
         GREETINGS:
         - If the user only says “hi/hello”, respond briefly and ask what device they’re on (ONE question).
       TXT
+
 
       # Include last few turns (this is the “memory”)
       ctx = conversation_context_text(conversation, turns: 10, max_chars: 4500)
