@@ -64,7 +64,7 @@ module V1
         )
       end
 
-      # ✅ Anti-avalanche throttle (transport-level guardrail only)
+      # ✅ Anti-avalanche throttle (transport-level only)
       recent_user_msgs =
         conversation.messages
                     .where(sender_type: "user")
@@ -79,14 +79,145 @@ module V1
         return
       end
 
-      # ✅ Direct LLM call (LLM owns the assistant voice + gives us a smart title)
+      # ============================================================
+      # ✅ Guardrails (pre-LLM) + deterministic contact drafts
+      # ============================================================
+      pre_risk_level = compute_risk_level_pre_llm(user_message.content)
+
+      guard = AskMom::Guardrails.new(
+        conversation: conversation,
+        new_user_text: user_message.content,
+        risk_level: pre_risk_level
+      ).check
+
+      # ✅ Hard-block only (too long / rate / llm budget)
+      if guard[:block]
+        assistant_text = [
+          guard[:friendly_message].to_s.strip.presence || "I can’t safely keep going with that right now.",
+          "",
+          "Let’s contact a person instead of continuing here.",
+          "Tap Text, Email, or Call below and I’ll open your phone with a pre-filled message."
+        ].compact.join("\n")
+
+        ai_message = conversation.messages.create!(
+          sender_type: "ai",
+          sender_id: nil,
+          content: assistant_text,
+          content_type: "text",
+          risk_level: pre_risk_level,
+          ai_model: "guardrails",
+          ai_prompt_version: "guardrails_v1",
+          ai_confidence: 0.0,
+          metadata: {
+            "summary" => assistant_text,
+            "steps" => [],
+            "escalate_suggested" => true,
+            "confidence" => 0.0,
+            "title" => sanitize_title(conversation.summary.to_s)
+          }
+        )
+
+        conversation.update!(
+          risk_level: ai_message.risk_level,
+          last_message_at: Time.current,
+          status: "escalated"
+        )
+
+        draft = AskMom::ContactDraftBuilder.new(
+          conversation: conversation,
+          user_text: user_message.content, # ✅ first-message-only
+          risk_level: pre_risk_level
+        ).build
+
+        render json: {
+          conversation_id: conversation.id,
+          message_id: ai_message.id,
+          risk_level: ai_message.risk_level,
+          summary: ai_message.metadata["summary"],
+          steps: ai_message.metadata["steps"],
+          escalate_suggested: ai_message.metadata["escalate_suggested"],
+          confidence: ai_message.metadata["confidence"],
+          conversation_title: conversation.summary,
+
+          show_contact_panel: true,
+          escalation_reason: guard[:reason],
+          contact_actions: { sms: true, email: true, call: true },
+          contact_draft: draft,
+          contact_targets: nil
+        }, status: :ok
+        return
+      end
+
+      # ============================================================
+      # ✅ SOFT ESCALATION (stuck 3x rule):
+      # If panel is showing, do NOT do normal LLM response.
+      # Give a contact-focused message and open the panel.
+      # Draft uses ONLY the current user message.
+      # ============================================================
+      if guard[:show_contact_panel]
+        assistant_text = [
+          "Okay — we’re going in circles.",
+          "",
+          "Let’s contact a person instead of continuing here.",
+          "Tap Text, Email, or Call below and I’ll open your phone with a pre-filled message."
+        ].join("\n")
+
+        ai_message = conversation.messages.create!(
+          sender_type: "ai",
+          sender_id: nil,
+          content: assistant_text,
+          content_type: "text",
+          risk_level: pre_risk_level,
+          ai_model: "guardrails",
+          ai_prompt_version: "guardrails_v1",
+          ai_confidence: 0.0,
+          metadata: {
+            "summary" => assistant_text,
+            "steps" => [],
+            "escalate_suggested" => true,
+            "confidence" => 0.0,
+            "title" => sanitize_title(conversation.summary.to_s)
+          }
+        )
+
+        conversation.update!(
+          risk_level: ai_message.risk_level,
+          last_message_at: Time.current,
+          status: "escalated"
+        )
+
+        draft = AskMom::ContactDraftBuilder.new(
+          conversation: conversation,
+          user_text: user_message.content, # ✅ first-message-only
+          risk_level: pre_risk_level
+        ).build
+
+        render json: {
+          conversation_id: conversation.id,
+          message_id: ai_message.id,
+          risk_level: ai_message.risk_level,
+          summary: ai_message.metadata["summary"],
+          steps: ai_message.metadata["steps"],
+          escalate_suggested: ai_message.metadata["escalate_suggested"],
+          confidence: ai_message.metadata["confidence"],
+          conversation_title: conversation.summary,
+
+          show_contact_panel: true,
+          escalation_reason: guard[:reason] || "stuck",
+          contact_actions: { sms: true, email: true, call: true },
+          contact_draft: draft,
+          contact_targets: nil
+        }, status: :ok
+        return
+      end
+
+      # ✅ LLM call (LLM owns assistant voice) — only when NOT escalating via panel
       ai = ask_mom_llm(
         user_text: user_message.content,
         user: current_user,
         conversation: conversation
       )
 
-      # ✅ Normalize types (not “talking”, just shaping data)
       summary = ai[:summary].to_s.strip
       steps = ai[:steps].is_a?(Array) ? ai[:steps].map { |s| s.to_s.strip }.reject(&:empty?) : []
 
@@ -101,12 +232,8 @@ module V1
       model = ai[:model].to_s.presence || "unknown"
       prompt_version = ai[:prompt_version].to_s.presence || "llm_v1"
 
-      # ✅ LLM-generated title (safe, short). We update this repeatedly as the convo evolves.
-      title = ai[:title].to_s.strip
-      title = sanitize_title(title)
+      title = sanitize_title(ai[:title].to_s.strip)
 
-      # ✅ If the LLM fails to provide required fields, treat as upstream failure.
-      # (No Rails-authored assistant message.)
       if summary.empty?
         render json: {
           error: "llm_invalid_response",
@@ -115,7 +242,6 @@ module V1
         return
       end
 
-      # Store formatted message content (for history/debug)
       content_text =
         if steps.any?
           ([summary, "", *steps.each_with_index.map { |s, i| "#{i + 1}. #{s}" }]).join("\n")
@@ -141,20 +267,12 @@ module V1
         }
       )
 
-      # ✅ Update conversation: risk + status + last_message_at + summary-as-title
-      # We use conversations.summary as the "title" (you already have this column).
-      #
-      # Behavior:
-      # - If user only says "hello": title will be "Getting started" / "Quick question" etc.
-      # - Once they explain, the LLM will return a better title and we overwrite it.
-      # - We always overwrite unless title is blank.
       update_hash = {
         risk_level: ai_message.risk_level,
         last_message_at: Time.current,
         status: escalate_suggested ? "escalated" : conversation.status
       }
       update_hash[:summary] = title if title.present?
-
       conversation.update!(update_hash)
 
       render json: {
@@ -165,33 +283,57 @@ module V1
         steps: ai_message.metadata["steps"],
         escalate_suggested: ai_message.metadata["escalate_suggested"],
         confidence: ai_message.metadata["confidence"],
-        conversation_title: conversation.summary
+        conversation_title: conversation.summary,
+
+        show_contact_panel: false,
+        escalation_reason: nil,
+        contact_actions: nil,
+        contact_draft: nil,
+        contact_targets: nil
       }, status: :ok
     end
 
     private
 
-    # Keep titles tight and display-friendly (no weird punctuation, no paragraphs).
+    def compute_risk_level_pre_llm(text)
+      t = text.to_s.downcase
+      high_hits = [
+        "gift card",
+        "wire money",
+        "bank transfer",
+        "zelle",
+        "venmo",
+        "cash app",
+        "crypto",
+        "bitcoin",
+        "refund",
+        "remote access",
+        "anydesk",
+        "teamviewer",
+        "screenconnect",
+        "login code",
+        "verification code",
+        "ssn",
+        "social security",
+        "bank account",
+        "routing number"
+      ]
+
+      return "high" if high_hits.any? { |k| t.include?(k) }
+      "low"
+    end
+
     def sanitize_title(s)
       t = s.to_s.strip
       return "" if t.empty?
 
-      # One line only
       t = t.gsub(/\s+/, " ")
       t = t.gsub(/[\r\n\t]/, " ").strip
-
-      # Remove surrounding quotes
       t = t.gsub(/\A["'“”‘’]+/, "").gsub(/["'“”‘’]+\z/, "")
-
-      # Hard cap length
       t = t[0, 48] if t.length > 48
-
-      # Avoid empty after stripping
       t
     end
 
-    # Builds a compact transcript of the last N messages for the LLM.
-    # Keeps cost bounded + avoids token avalanches.
     def conversation_context_text(conversation, turns: 8, max_chars: 4000)
       msgs =
         conversation.messages
@@ -212,20 +354,12 @@ module V1
 
         content = m.content.to_s.strip
         next if content.empty?
-
-        # Keep each message sane
         content = content[0, 900] if content.length > 900
-
         lines << "#{role}: #{content}"
       end
 
       text = lines.join("\n")
-
-      # Hard cap total context size
-      if text.length > max_chars
-        text = text[-max_chars, max_chars] # keep the most recent tail
-      end
-
+      text = text[-max_chars, max_chars] if text.length > max_chars
       text
     end
 
@@ -285,11 +419,8 @@ module V1
         - If the user only says “hi/hello”, respond briefly and ask what device they’re on (ONE question).
       TXT
 
-
-      # Include last few turns (this is the “memory”)
       ctx = conversation_context_text(conversation, turns: 10, max_chars: 4500)
 
-      # IMPORTANT: OpenAI requires the word "json" to appear in the input when using json_object mode.
       input_text = <<~INP
         Respond in JSON.
 
