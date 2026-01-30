@@ -6,18 +6,43 @@ require "uri"
 module V1
   class AskMomController < ApplicationController
     include JwtAuth
+    include Rails.application.routes.url_helpers
 
     before_action :authenticate_user!
 
     def create
+      # ✅ Multipart images support: images[] (Rails normalizes images[] -> params[:images])
+      uploaded_images = params[:images]
+      uploaded_images = [uploaded_images].compact unless uploaded_images.is_a?(Array)
+      uploaded_images = uploaded_images.compact
+
       # ✅ Accept either payload shape:
       # - { "text": "Hi" }
       # - { "ask_mom": { "text": "Hi" } }
-      text =
-        if params[:text].present?
-          params[:text].to_s
+      #
+      # IMPORTANT:
+      # - Allow text to be blank if images exist.
+      # - Only hard error if BOTH text blank AND no images.
+      text = extract_text_param(params)
+
+      Rails.logger.info("[AskMomController] create: text_len=#{text.to_s.length} images=#{uploaded_images.length} content_type_hint=#{request.content_type}")
+
+      if text.blank? && uploaded_images.empty?
+        render json: {
+          error: "invalid_request",
+          message: "Please type a message or attach an image.",
+          conversation_id: params[:conversation_id]
+        }, status: :bad_request
+        return
+      end
+
+      content_type =
+        if uploaded_images.any? && text.present?
+          "mixed"
+        elsif uploaded_images.any?
+          "image"
         else
-          params.require(:ask_mom).permit(:text).fetch(:text).to_s
+          "text"
         end
 
       conversation_id = params[:conversation_id]
@@ -35,7 +60,7 @@ module V1
         end
 
       # Store user message (redacted if needed)
-      if SensitiveDataRedactor.contains_sensitive?(text)
+      if text.present? && SensitiveDataRedactor.contains_sensitive?(text)
         redacted = SensitiveDataRedactor.redact(text)
         reasons = SensitiveDataRedactor.reasons(text)
 
@@ -43,7 +68,7 @@ module V1
           sender_type: "user",
           sender_id: current_user.id,
           content: redacted,
-          content_type: "text",
+          content_type: content_type,
           risk_level: "unknown",
           metadata: { redacted: true, redaction_reasons: reasons }
         )
@@ -54,15 +79,25 @@ module V1
           metadata: { note: "Original content intentionally not stored." }
         )
       else
+        # ✅ If image-only, store empty string (NOT nil) so downstream code stays simple.
         user_message = conversation.messages.create!(
           sender_type: "user",
           sender_id: current_user.id,
-          content: text,
-          content_type: "text",
+          content: text.to_s,
+          content_type: content_type,
           risk_level: "unknown",
           metadata: {}
         )
       end
+
+      # ✅ Attach images AFTER creating the message
+      if uploaded_images.any?
+        uploaded_images.each { |img| user_message.images.attach(img) }
+      end
+
+      Rails.logger.info(
+        "[AskMomController] stored user_message id=#{user_message.id} content_type=#{user_message.content_type} images_attached=#{user_message.images.attached? ? user_message.images.size : 0}"
+      )
 
       # ✅ Anti-avalanche throttle (transport-level only)
       recent_user_msgs =
@@ -74,7 +109,10 @@ module V1
       if recent_user_msgs > 3
         render json: {
           error: "rate_limited",
-          message: "Too many messages too quickly. Please wait a moment and try again."
+          message: "Too many messages too quickly. Please wait a moment and try again.",
+          conversation_id: conversation.id,
+          user_message_id: user_message.id,
+          user_images: image_urls_for(user_message)
         }, status: :too_many_requests
         return
       end
@@ -143,16 +181,16 @@ module V1
           escalation_reason: guard[:reason],
           contact_actions: { sms: true, email: true, call: true },
           contact_draft: draft,
-          contact_targets: nil
+          contact_targets: nil,
+
+          user_message_id: user_message.id,
+          user_images: image_urls_for(user_message)
         }, status: :ok
         return
       end
 
       # ============================================================
-      # ✅ SOFT ESCALATION (stuck 3x rule):
-      # If panel is showing, do NOT do normal LLM response.
-      # Give a contact-focused message and open the panel.
-      # Draft uses ONLY the current user message.
+      # ✅ SOFT ESCALATION (stuck 3x rule)
       # ============================================================
       if guard[:show_contact_panel]
         assistant_text = [
@@ -206,16 +244,20 @@ module V1
           escalation_reason: guard[:reason] || "stuck",
           contact_actions: { sms: true, email: true, call: true },
           contact_draft: draft,
-          contact_targets: nil
+          contact_targets: nil,
+
+          user_message_id: user_message.id,
+          user_images: image_urls_for(user_message)
         }, status: :ok
         return
       end
 
-      # ✅ LLM call (LLM owns assistant voice) — only when NOT escalating via panel
+      # ✅ LLM call (WITH images via image_url)
       ai = ask_mom_llm(
         user_text: user_message.content,
         user: current_user,
-        conversation: conversation
+        conversation: conversation,
+        user_message: user_message
       )
 
       summary = ai[:summary].to_s.strip
@@ -237,7 +279,10 @@ module V1
       if summary.empty?
         render json: {
           error: "llm_invalid_response",
-          message: "Assistant response unavailable. Please try again."
+          message: "Assistant response unavailable. Please try again.",
+          conversation_id: conversation.id,
+          user_message_id: user_message.id,
+          user_images: image_urls_for(user_message)
         }, status: :bad_gateway
         return
       end
@@ -289,12 +334,64 @@ module V1
         escalation_reason: nil,
         contact_actions: nil,
         contact_draft: nil,
-        contact_targets: nil
+        contact_targets: nil,
+
+        user_message_id: user_message.id,
+        user_images: image_urls_for(user_message)
       }, status: :ok
     end
 
     private
 
+    # ----------------------------
+    # Params
+    # ----------------------------
+    def extract_text_param(p)
+      # If top-level "text" key exists (even blank), honor it.
+      if p.key?(:text) || p.key?("text")
+        return p[:text].to_s
+      end
+
+      # Otherwise try nested ask_mom[text], but don't blow up if missing.
+      begin
+        p.require(:ask_mom).permit(:text).fetch(:text).to_s
+      rescue ActionController::ParameterMissing
+        ""
+      end
+    end
+
+    # ----------------------------
+    # URL host helper
+    # ----------------------------
+    def url_host
+      # Prefer explicit host if set (recommended for production),
+      # else fall back to request.base_url for local/dev.
+      ENV["APP_HOST"].to_s.presence || request.base_url
+    end
+
+    # ----------------------------
+    # Images (for app UI + for LLM)
+    # ----------------------------
+    def image_urls_for(message)
+      return [] unless message&.images&.attached?
+
+      message.images.map do |att|
+        # S3 presigned URL (publicly reachable by OpenAI)
+        att.blob.url(
+          expires_in: 10.minutes,
+          disposition: "inline",
+          filename: att.blob.filename
+        )
+      end
+    rescue => e
+      Rails.logger.warn("[AskMomController] image_urls_for failed: #{e.class}: #{e.message}")
+      []
+    end
+
+
+    # ----------------------------
+    # Risk + Title
+    # ----------------------------
     def compute_risk_level_pre_llm(text)
       t = text.to_s.downcase
       high_hits = [
@@ -334,6 +431,9 @@ module V1
       t
     end
 
+    # ----------------------------
+    # Context
+    # ----------------------------
     def conversation_context_text(conversation, turns: 8, max_chars: 4000)
       msgs =
         conversation.messages
@@ -363,75 +463,83 @@ module V1
       text
     end
 
-    def ask_mom_llm(user_text:, user:, conversation:)
+    # ----------------------------
+    # LLM (WITH IMAGES via image_url)
+    # ----------------------------
+    def ask_mom_llm(user_text:, user:, conversation:, user_message:)
       api_key = ENV["OPENAI_API_KEY"].to_s
       raise "Missing OPENAI_API_KEY" if api_key.empty?
 
       model = ENV.fetch("OPENAI_MODEL", "gpt-4o-mini")
-      timeout = ENV.fetch("OPENAI_TIMEOUT", "12").to_i
+      timeout = ENV.fetch("OPENAI_TIMEOUT", "20").to_i
 
       instructions = <<~TXT
         You are "Mom's Computer" — a charmingly curmudgeonly, no-nonsense scam-safety + tech-help assistant for SENIORS.
         Dry and blunt, lightly sarcastic, but NEVER cruel. If the user sounds scared or confused, drop the snark.
         Use simple words, short sentences, and very concrete actions (tap this, open that). Avoid jargon.
 
-        CONVERSATION STYLE (important):
-        - Your vibe: dry, blunt, lightly sarcastic like a grumpy-but-caring relative.
-        - You MAY include at most ONE short curmudgeonly quip per response (max 8 words).
-          Examples: “Alright. Let’s fix this.” / “Yep. That’s suspicious.” / “Nope. Don’t click that.”
-        - NEVER use sarcasm if the user seems scared, panicked, or confused. In that case: warm + calm only.
-        - Always acknowledge what they did right (“Good. You did the right thing.”).
-        - Always include a reassuring line that reduces panic (“You’re okay. We’ll handle this.”).
-        - Ask for information like a real conversation: ask ONLY ONE question per response.
-        - Steps are for actions. Put the ONE question in the summary (not in steps) when possible.
-        - Keep summary 1–2 sentences, but it can be punchy. Prefer short, confident sentences.
+        IMPORTANT ABOUT IMAGES:
+        - If images are attached, you CAN see them.
+        - Do NOT say you "can't see images" or "only descriptions help."
+        - If the user sends only an image with no text, describe what you see and ask ONE clarifying question.
 
-        TONE DIAL:
-        - If risk_level is "high": drop sarcasm, be calm and direct.
-        - If risk_level is "medium": allow ONE quip.
-        - If risk_level is "low": allow ONE quip.
+        CONVERSATION STYLE:
+        - You MAY include at most ONE short curmudgeonly quip per response (max 8 words).
+        - NEVER use sarcasm if the user seems scared, panicked, or confused.
+        - Ask ONLY ONE question per response.
+        - Keep summary 1–2 sentences.
 
         Output must be valid JSON only. No markdown. No extra text.
 
         Return exactly these keys:
         - risk_level: "low" | "medium" | "high"
-        - title: a short, intuitive conversation title (3–7 words). No quotes. No punctuation at the end.
-                If the user has only greeted (hi/hello), use a generic title like:
-                "Getting started" or "Quick question".
-                IMPORTANT: As the user explains more later, you SHOULD update the title to be more specific.
+        - title: a short, intuitive conversation title (3–7 words). No punctuation at the end.
         - summary: 1-2 sentences (ALWAYS present). Include the ONE question here if you need info.
-        - steps: array of 0-4 short action strings (“Open Settings…”, “Turn on Airplane mode…”)
+        - steps: array of 0-4 short action strings
         - escalate_suggested: boolean
         - confidence: number 0..1
 
         SAFETY RULES:
         - PRIVACY: Never ask for passwords, login codes, SSN, or bank/credit card numbers.
-        - PRIVACY: If the user offers any of those, tell them NOT to share them and to remove/redact them.
-        - REMINDER: In scam-risk situations (money/codes/links/remote access) include a short reminder like:
-          “Don’t share passwords, login codes, SSN, or bank numbers. We will never ask.”
-          (Keep it brief; don’t over-repeat on low-risk tech questions.)
-        - If money, codes, gift cards, crypto, "refund", bank transfer, or remote access is involved => risk_level MUST be "high".
-        - If user already paid/clicked/shared codes/installed remote access => escalate_suggested MUST be true.
-        - If it’s a scam scenario, include “do this to be safe” actions (close tab, disconnect call, check bank app from official app, etc.).
-        - If it’s troubleshooting, first identify device + what they see, then give the smallest next step.
-
-        GREETINGS:
-        - If the user only says “hi/hello”, respond briefly and ask what device they’re on (ONE question).
+        - If money/codes/gift cards/crypto/remote access is involved => risk_level MUST be "high".
       TXT
 
       ctx = conversation_context_text(conversation, turns: 10, max_chars: 4500)
 
-      input_text = <<~INP
-        Respond in JSON.
+      user_prompt_text =
+        if user_text.to_s.strip.empty?
+          "The user sent only image(s). Analyze the image(s). Tell me what looks important or suspicious, and what I should do next."
+        else
+          user_text.to_s
+        end
 
-        Conversation so far:
-        #{ctx}
-      INP
+      # ✅ Generate signed image URLs and pass them as input_image.image_url
+      image_urls = image_urls_for(user_message)
+
+      Rails.logger.info("[AskMomController] LLM: model=#{model} ctx_chars=#{ctx.length} sending_images=#{image_urls.length}")
+      image_urls.each_with_index do |u, i|
+        Rails.logger.info("[AskMomController] LLM image_url[#{i}]=#{u[0, 140]}...")
+      end
+
+      content_parts = []
+      content_parts << {
+        type: "input_text",
+        text: "Conversation so far:\n#{ctx}\n\nUser:\n#{user_prompt_text}\n\nRespond in JSON."
+      }
+
+      image_urls.each do |u|
+        content_parts << { type: "input_image", image_url: u }
+      end
 
       payload = {
         model: model,
         instructions: instructions,
-        input: input_text,
+        input: [
+          {
+            role: "user",
+            content: content_parts
+          }
+        ],
         text: { format: { type: "json_object" } },
         store: false
       }
@@ -464,6 +572,9 @@ module V1
       }
     end
 
+    # ----------------------------
+    # OpenAI HTTP helpers
+    # ----------------------------
     def openai_post_json!(api_key:, url:, payload:, timeout:)
       uri = URI(url)
       http = Net::HTTP.new(uri.host, uri.port)

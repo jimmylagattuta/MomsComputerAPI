@@ -2,6 +2,8 @@
 module V1
   class ConversationsController < ApplicationController
     include JwtAuth
+    include Rails.application.routes.url_helpers
+
     before_action :authenticate_user!
 
     def index
@@ -14,8 +16,6 @@ module V1
       if q.present?
         pattern = "%#{sanitize_sql_like(q)}%"
 
-        # ✅ SQLite doesn't support ILIKE
-        # ✅ Postgres does, but LOWER(...) LIKE works everywhere
         scope =
           scope.joins(:messages)
                .where("LOWER(messages.content) LIKE LOWER(?)", pattern)
@@ -64,13 +64,29 @@ module V1
             content: m.content,
             content_type: m.content_type,
             risk_level: m.risk_level,
-            created_at: m.created_at
+            created_at: m.created_at,
+
+            # ✅ add this:
+            images: message_image_urls(m)
           }
         }
       }
     end
 
     private
+
+    def message_image_urls(message)
+      return [] unless message.respond_to?(:images) && message.images.attached?
+
+      message.images.map do |img|
+        rails_blob_url(
+          img,
+          host: request.base_url,
+          disposition: "inline",
+          expires_in: 365.days
+        )
+      end
+    end
 
     def sanitize_sql_like(string)
       string.to_s.gsub(/[\\%_]/) { |x| "\\#{x}" }
