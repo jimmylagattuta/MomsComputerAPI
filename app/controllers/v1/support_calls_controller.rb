@@ -1,4 +1,6 @@
 class V1::SupportCallsController < ApplicationController
+  include JwtAuth
+
   before_action :authenticate_user!
 
   def create
@@ -21,6 +23,8 @@ class V1::SupportCallsController < ApplicationController
 
     user_phone_number = normalized_user_phone_number(user)
 
+    Rails.logger.info("📞 [SUPPORT CALL] user_id=#{user.id} user_phone_number=#{user_phone_number.inspect}")
+
     if user_phone_number.blank?
       return render json: {
         error: "User phone number is missing."
@@ -34,10 +38,14 @@ class V1::SupportCallsController < ApplicationController
       chargeable: false
     )
 
+    Rails.logger.info("📞 [SUPPORT CALL] session_created id=#{support_call_session.id}")
+
     twilio_call = TwilioService.start_support_call!(
       support_call_session: support_call_session,
       user_phone_number: user_phone_number
     )
+
+    Rails.logger.info("📞 [SUPPORT CALL] twilio_call_created sid=#{twilio_call.sid} status=#{twilio_call.status.inspect}")
 
     support_call_session.update!(
       twilio_call_sid: twilio_call.sid,
