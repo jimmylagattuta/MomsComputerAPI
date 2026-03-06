@@ -5,10 +5,20 @@ class V1::SupportCallsController < ApplicationController
 
   def create
     user = current_user
-
     cycle = user.current_support_call_cycle
 
-    unless cycle.has_calls_remaining?
+    active_buffer_session = user.support_call_sessions
+      .where("buffer_expires_at > ?", Time.current)
+      .order(buffer_expires_at: :desc)
+      .first
+
+    if active_buffer_session.present?
+      Rails.logger.info(
+        "📞 [SUPPORT CALL] active reconnect buffer found " \
+        "user_id=#{user.id} session_id=#{active_buffer_session.id} " \
+        "buffer_expires_at=#{active_buffer_session.buffer_expires_at}"
+      )
+    elsif !cycle.has_calls_remaining?
       return render json: {
         error: "Monthly call limit reached.",
         calls_remaining: cycle.calls_remaining
@@ -29,10 +39,14 @@ class V1::SupportCallsController < ApplicationController
       support_call_cycle: cycle,
       status: "queued",
       started_at: Time.current,
-      chargeable: false
+      chargeable: false,
+      buffer_expires_at: active_buffer_session&.buffer_expires_at
     )
 
-    Rails.logger.info("📞 [SUPPORT CALL] session_created id=#{support_call_session.id}")
+    Rails.logger.info(
+      "📞 [SUPPORT CALL] session_created id=#{support_call_session.id} " \
+      "reconnect_buffer=#{active_buffer_session.present?}"
+    )
 
     twilio_call = TwilioService.start_support_call!(
       support_call_session: support_call_session,
@@ -48,9 +62,11 @@ class V1::SupportCallsController < ApplicationController
 
     render json: {
       success: true,
-      message: "Support call started.",
+      message: active_buffer_session.present? ? "Reconnect call started." : "Support call started.",
       support_call_session_id: support_call_session.id,
-      calls_remaining: cycle.calls_remaining
+      calls_remaining: cycle.calls_remaining,
+      reconnect_buffer_active: active_buffer_session.present?,
+      buffer_expires_at: active_buffer_session&.buffer_expires_at
     }, status: :created
   rescue Twilio::REST::RestError => e
     Rails.logger.error("Twilio support call error: #{e.message}")

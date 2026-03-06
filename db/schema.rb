@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_06_072051) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_06_110334) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -214,6 +214,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_06_072051) do
     t.string "failure_reason"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "buffer_expires_at"
+    t.index ["buffer_expires_at"], name: "index_support_call_sessions_on_buffer_expires_at"
     t.index ["chargeable"], name: "index_support_call_sessions_on_chargeable"
     t.index ["status"], name: "index_support_call_sessions_on_status"
     t.index ["support_call_cycle_id"], name: "index_support_call_sessions_on_support_call_cycle_id"

@@ -88,6 +88,7 @@ class V1::TwilioWebhooksController < ActionController::Base
     return false if support_call_session.chargeable?
     return false unless call_status == "completed"
     return false unless duration_seconds >= MINIMUM_CHARGEABLE_DURATION_SECONDS
+    return false if support_call_session.buffer_active?
 
     true
   end
