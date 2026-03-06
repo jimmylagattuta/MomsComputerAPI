@@ -6,12 +6,6 @@ class V1::SupportCallsController < ApplicationController
   def create
     user = current_user
 
-    unless user.support_subscription_active?
-      return render json: {
-        error: "Active subscription required."
-      }, status: :forbidden
-    end
-
     cycle = user.current_support_call_cycle
 
     unless cycle.has_calls_remaining?
