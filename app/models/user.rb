@@ -11,6 +11,22 @@ class User < ApplicationRecord
   has_many :subscriptions, dependent: :destroy
   has_many :entitlements, dependent: :destroy
   has_many :consent_records, dependent: :destroy
+  has_many :support_call_cycles, dependent: :destroy
+  has_many :support_call_sessions, dependent: :destroy
 
   validates :email, presence: true, uniqueness: true
+
+
+
+  def current_support_call_cycle(time = Time.current)
+    SupportCallCycleService.current_cycle_for(self, time)
+  end
+
+  def support_calls_remaining(time = Time.current)
+    current_support_call_cycle(time).calls_remaining
+  end
+
+  def support_subscription_active?
+    subscriptions.where(status: "active").exists?
+  end
 end

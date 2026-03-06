@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_01_09_171248) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_06_072051) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -188,6 +188,39 @@ ActiveRecord::Schema[7.2].define(version: 2026_01_09_171248) do
     t.index ["user_id"], name: "index_subscriptions_on_user_id"
   end
 
+  create_table "support_call_cycles", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "calls_allowed", default: 3, null: false
+    t.integer "calls_used", default: 0, null: false
+    t.datetime "cycle_start_at", null: false
+    t.datetime "cycle_end_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "cycle_start_at", "cycle_end_at"], name: "index_support_call_cycles_on_user_and_cycle_range"
+    t.index ["user_id"], name: "index_support_call_cycles_on_user_id"
+  end
+
+  create_table "support_call_sessions", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "support_call_cycle_id", null: false
+    t.string "twilio_call_sid"
+    t.string "status"
+    t.datetime "started_at"
+    t.datetime "answered_at"
+    t.datetime "ended_at"
+    t.integer "duration_seconds"
+    t.boolean "chargeable", default: false, null: false
+    t.datetime "charged_at"
+    t.string "failure_reason"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["chargeable"], name: "index_support_call_sessions_on_chargeable"
+    t.index ["status"], name: "index_support_call_sessions_on_status"
+    t.index ["support_call_cycle_id"], name: "index_support_call_sessions_on_support_call_cycle_id"
+    t.index ["twilio_call_sid"], name: "index_support_call_sessions_on_twilio_call_sid", unique: true
+    t.index ["user_id"], name: "index_support_call_sessions_on_user_id"
+  end
+
   create_table "trusted_contacts", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "name"
@@ -262,6 +295,9 @@ ActiveRecord::Schema[7.2].define(version: 2026_01_09_171248) do
   add_foreign_key "messages", "conversations"
   add_foreign_key "subscriptions", "plans"
   add_foreign_key "subscriptions", "users"
+  add_foreign_key "support_call_cycles", "users"
+  add_foreign_key "support_call_sessions", "support_call_cycles"
+  add_foreign_key "support_call_sessions", "users"
   add_foreign_key "trusted_contacts", "users"
   add_foreign_key "user_profiles", "users"
 end

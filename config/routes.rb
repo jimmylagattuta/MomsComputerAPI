@@ -1,5 +1,12 @@
 Rails.application.routes.draw do
   namespace :v1 do
+    # Support Calls
+    resources :support_calls, only: [:create]
+
+    # Twilio Webhooks
+    post "twilio_webhooks/voice_bridge", to: "twilio_webhooks#voice_bridge"
+    post "twilio_webhooks/call_status", to: "twilio_webhooks#call_status"
+
     get "me", to: "me#show"
 
     namespace :auth do
@@ -10,7 +17,7 @@ Rails.application.routes.draw do
 
     post "ask_mom", to: "ask_mom#create"
 
-    # ✅ Conversation history (Ask Mom drawer)
+    # Conversation history (Ask Mom drawer)
     resources :conversations, only: [:index, :show]
 
     resources :messages, only: [] do
