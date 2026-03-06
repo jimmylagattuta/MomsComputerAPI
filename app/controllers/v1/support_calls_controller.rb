@@ -63,6 +63,6 @@ class V1::SupportCallsController < ApplicationController
   private
 
   def normalized_user_phone_number(user)
-    user.phone_number.presence || user.phone.presence
+    user.phone.presence
   end
 end
