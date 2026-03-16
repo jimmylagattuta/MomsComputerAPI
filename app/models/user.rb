@@ -13,10 +13,13 @@ class User < ApplicationRecord
   has_many :consent_records, dependent: :destroy
   has_many :support_call_cycles, dependent: :destroy
   has_many :support_call_sessions, dependent: :destroy
+  has_many :support_text_cycles, dependent: :destroy
+  has_many :support_text_threads, dependent: :destroy
+  has_many :support_text_messages, dependent: :nullify
 
-  validates :email, presence: true, uniqueness: true
+  before_validation :normalize_email
 
-
+  validates :email, presence: true, uniqueness: { case_sensitive: false }
 
   def current_support_call_cycle(time = Time.current)
     SupportCallCycleService.current_cycle_for(self, time)
@@ -28,5 +31,11 @@ class User < ApplicationRecord
 
   def support_subscription_active?
     subscriptions.where(status: "active").exists?
+  end
+
+  private
+
+  def normalize_email
+    self.email = email.to_s.strip.downcase
   end
 end

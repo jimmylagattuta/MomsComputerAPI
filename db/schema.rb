@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_06_110334) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_13_112450) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -223,6 +223,79 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_06_110334) do
     t.index ["user_id"], name: "index_support_call_sessions_on_user_id"
   end
 
+  create_table "support_text_cycles", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "messages_used"
+    t.integer "images_used"
+    t.datetime "cycle_start_at"
+    t.datetime "cycle_end_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "cycle_start_at", "cycle_end_at"], name: "idx_support_text_cycles_user_range"
+    t.index ["user_id"], name: "index_support_text_cycles_on_user_id"
+  end
+
+  create_table "support_text_messages", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "support_text_thread_id", null: false
+    t.string "direction"
+    t.string "status"
+    t.text "body"
+    t.datetime "sent_at"
+    t.datetime "delivered_at"
+    t.datetime "read_at"
+    t.datetime "failed_at"
+    t.string "failure_reason"
+    t.boolean "intro_message"
+    t.boolean "visible_to_user"
+    t.integer "author_agent_id"
+    t.string "author_agent_name"
+    t.json "metadata"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_agent_id"], name: "index_support_text_messages_on_author_agent_id"
+    t.index ["direction"], name: "index_support_text_messages_on_direction"
+    t.index ["status"], name: "index_support_text_messages_on_status"
+    t.index ["support_text_thread_id", "created_at"], name: "idx_support_text_messages_thread_created"
+    t.index ["support_text_thread_id"], name: "index_support_text_messages_on_support_text_thread_id"
+    t.index ["user_id"], name: "index_support_text_messages_on_user_id"
+  end
+
+  create_table "support_text_threads", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "support_text_cycle_id", null: false
+    t.string "status"
+    t.string "public_token"
+    t.string "subject"
+    t.string "priority"
+    t.string "assigned_agent_name"
+    t.integer "assigned_agent_id"
+    t.string "support_identity_label"
+    t.string "support_identity_email"
+    t.string "support_identity_user_ref"
+    t.json "support_identity_snapshot"
+    t.datetime "started_at"
+    t.datetime "last_message_at"
+    t.datetime "last_user_message_at"
+    t.datetime "last_support_message_at"
+    t.datetime "closed_at"
+    t.datetime "blocked_at"
+    t.datetime "cooldown_until"
+    t.boolean "intro_sent"
+    t.boolean "blocked"
+    t.boolean "user_unread"
+    t.boolean "support_unread"
+    t.json "metadata"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["assigned_agent_id"], name: "index_support_text_threads_on_assigned_agent_id"
+    t.index ["last_message_at"], name: "index_support_text_threads_on_last_message_at"
+    t.index ["public_token"], name: "index_support_text_threads_on_public_token", unique: true
+    t.index ["status"], name: "index_support_text_threads_on_status"
+    t.index ["support_text_cycle_id"], name: "index_support_text_threads_on_support_text_cycle_id"
+    t.index ["user_id"], name: "index_support_text_threads_on_user_id"
+  end
+
   create_table "trusted_contacts", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "name"
@@ -300,6 +373,11 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_06_110334) do
   add_foreign_key "support_call_cycles", "users"
   add_foreign_key "support_call_sessions", "support_call_cycles"
   add_foreign_key "support_call_sessions", "users"
+  add_foreign_key "support_text_cycles", "users"
+  add_foreign_key "support_text_messages", "support_text_threads"
+  add_foreign_key "support_text_messages", "users"
+  add_foreign_key "support_text_threads", "support_text_cycles"
+  add_foreign_key "support_text_threads", "users"
   add_foreign_key "trusted_contacts", "users"
   add_foreign_key "user_profiles", "users"
 end

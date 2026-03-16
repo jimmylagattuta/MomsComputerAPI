@@ -1,11 +1,22 @@
+# config/routes.rb
 Rails.application.routes.draw do
   namespace :v1 do
-    # Support Calls
     resources :support_calls, only: [:create]
 
-    # Twilio Webhooks
-    post "twilio_webhooks/voice_bridge", to: "twilio_webhooks#voice_bridge"
-    post "twilio_webhooks/call_status", to: "twilio_webhooks#call_status"
+    get  "support_text_thread", to: "support_text_threads#current"
+    post "support_text_thread", to: "support_text_threads#create"
+
+    resources :support_text_threads, only: [:index, :show]
+    resources :support_text_messages, only: [:index, :create]
+
+    namespace :support do
+      resources :text_threads, only: [:index, :show, :update] do
+        resources :messages, only: [:index, :create], controller: "text_messages"
+        post :assign, on: :member
+        post :close,  on: :member
+        post :block,  on: :member
+      end
+    end
 
     get "me", to: "me#show"
 
@@ -17,14 +28,12 @@ Rails.application.routes.draw do
 
     post "ask_mom", to: "ask_mom#create"
 
-    # Conversation history (Ask Mom drawer)
     resources :conversations, only: [:index, :show]
 
     resources :messages, only: [] do
       post :attachments, on: :member, to: "attachments#create"
     end
 
-    # Leaving this in place is fine, but Ask Mom no longer auto-creates tickets.
     resources :escalations, only: [:create]
   end
 end
