@@ -20,15 +20,22 @@ class V1::SupportTextMessagesController < ApplicationController
   def create
     thread = current_user.support_text_threads.find(params[:thread_id] || current_thread_id_param)
 
+    cleaned_body = params[:body].to_s.strip
+    cleaned_image_signed_ids = Array(params[:image_signed_ids]).map(&:presence).compact
+
+    if cleaned_body.blank? && cleaned_image_signed_ids.blank?
+      return render json: { error: "Message content is required." }, status: :unprocessable_entity
+    end
+
     message = SupportTextMessageSender.call(
       thread: thread,
-      body: params[:body],
-      image_signed_ids: params[:image_signed_ids]
+      body: cleaned_body,
+      image_signed_ids: cleaned_image_signed_ids
     )
 
     # Wait a short time so the next poll (on a different connection) sees the message
     # 150–300 ms is usually enough in most hosted Postgres setups
-    sleep 0.2   # ← 200 ms delay — adjust to 0.15 or 0.3 if needed
+    sleep 0.2
 
     render json: { message: serialize_message(message) }, status: :created
   rescue ActiveSupport::MessageVerifier::InvalidSignature

@@ -33,6 +33,10 @@ class User < ApplicationRecord
     subscriptions.where(status: "active").exists?
   end
 
+  def admin?
+    role == "admin"
+  end
+
   private
 
   def normalize_email
