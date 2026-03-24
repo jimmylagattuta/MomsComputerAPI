@@ -1,7 +1,7 @@
 source "https://rubygems.org"
 # ruby "3.3.9"
 
-gem "rails", "~> 7.2.3"
+gem "rails", "~> 8.1.2"
 
 # DB
 gem "pg"
