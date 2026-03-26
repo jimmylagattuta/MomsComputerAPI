@@ -1,5 +1,8 @@
 # config/routes.rb
 Rails.application.routes.draw do
+  # ✅ ActionCable endpoint
+  mount ActionCable.server => "/cable"
+
   namespace :v1 do
     resources :support_calls, only: [:create]
 

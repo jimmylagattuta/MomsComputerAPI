@@ -11,6 +11,7 @@ class SupportTextMessage < ApplicationRecord
   validates :status, presence: true, inclusion: { in: STATUSES }
 
   before_validation :set_defaults, on: :create
+  after_commit :broadcast_realtime_updates, on: :create
 
   validate :body_or_images_present
   validate :image_count_within_limit
@@ -50,6 +51,10 @@ class SupportTextMessage < ApplicationRecord
   end
 
   private
+
+  def broadcast_realtime_updates
+    SupportTextRealtimeBroadcaster.new(self).broadcast!
+  end
 
   def set_defaults
     self.status ||= "sent"
