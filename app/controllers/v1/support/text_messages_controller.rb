@@ -68,7 +68,7 @@ class V1::Support::TextMessagesController < ApplicationController
       author_agent_name: admin_display_name
     )
 
-    Rails.logger.info("Admin support message: saving without validation before attaching images")
+    # Rails.logger.info("Admin support message: saving without validation before attaching images")
     message.save!(validate: false)
 
     attach_signed_images!(message, cleaned_image_signed_ids) if cleaned_image_signed_ids.present?
