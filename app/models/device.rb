@@ -8,5 +8,5 @@ class Device < ApplicationRecord
   validates :push_token, uniqueness: true, allow_nil: true
 
   # Optional: scope for active devices
-  scope :active, -> { where("last_seen_at > ?", 30.days.ago) }
+  scope :active, -> { where("devices.last_seen_at > ?", 30.days.ago) }
 end

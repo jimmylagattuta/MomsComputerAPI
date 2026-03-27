@@ -113,6 +113,8 @@ class V1::Support::TextMessagesController < ApplicationController
       )
     end
 
+    SupportTextNotificationService.notify_new_message!(message)
+
     render json: {
       ok: true,
       message: serialize_message(message),

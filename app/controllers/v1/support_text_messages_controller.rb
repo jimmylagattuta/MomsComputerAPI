@@ -48,6 +48,8 @@ class V1::SupportTextMessagesController < ApplicationController
       uploaded_images: uploaded_images
     )
 
+    SupportTextNotificationService.notify_new_message!(message)
+
     sleep 0.2
 
     render json: { message: serialize_message(message) }, status: :created
