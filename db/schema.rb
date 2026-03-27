@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_13_112450) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_26_215031) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -353,7 +353,14 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_13_112450) do
     t.datetime "onboarding_completed_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "phone_verified_at"
+    t.string "phone_verification_code_digest"
+    t.datetime "phone_verification_sent_at"
+    t.integer "phone_verification_attempts", default: 0, null: false
+    t.string "phone_verification_pending_phone"
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["phone"], name: "index_users_on_phone", unique: true
+    t.index ["phone_verification_pending_phone"], name: "index_users_on_phone_verification_pending_phone"
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"

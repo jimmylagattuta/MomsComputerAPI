@@ -59,6 +59,19 @@ class V1::TwilioWebhooksController < ActionController::Base
     head :ok
   end
 
+  # 🔥 NEW — SMS DELIVERY STATUS TRACKING
+  def message_status
+    Rails.logger.info(
+      "📩 [Twilio SMS STATUS] SID=#{params[:MessageSid]} " \
+      "Status=#{params[:MessageStatus]} " \
+      "To=#{params[:To]} " \
+      "ErrorCode=#{params[:ErrorCode]} " \
+      "ErrorMessage=#{params[:ErrorMessage]}"
+    )
+
+    head :ok
+  end
+
   private
 
   def normalize_status(status)

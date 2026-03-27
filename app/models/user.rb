@@ -3,7 +3,7 @@ class User < ApplicationRecord
   has_secure_password
 
   has_one :user_profile, dependent: :destroy
-  has_many :devices, dependent: :destroy
+  has_many :devices, -> { order(last_seen_at: :desc) }, dependent: :destroy
   has_many :conversations, dependent: :destroy
   has_many :trusted_contacts, dependent: :destroy
   has_many :escalation_tickets, dependent: :destroy
@@ -31,6 +31,10 @@ class User < ApplicationRecord
 
   def support_subscription_active?
     subscriptions.where(status: "active").exists?
+  end
+
+  def active_devices
+    devices.where("last_seen_at > ?", 30.days.ago)
   end
 
   def admin?

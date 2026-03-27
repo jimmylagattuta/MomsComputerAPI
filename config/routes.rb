@@ -1,9 +1,10 @@
-# config/routes.rb
 Rails.application.routes.draw do
   # ✅ ActionCable endpoint
   mount ActionCable.server => "/cable"
 
   namespace :v1 do
+    post "devices/register", to: "devices#register"
+
     resources :support_calls, only: [:create]
 
     get  "support_text_thread", to: "support_text_threads#current"
@@ -24,10 +25,20 @@ Rails.application.routes.draw do
     get "me", to: "me#show"
 
     namespace :auth do
+      # 🔥 PHONE VERIFICATION
+      post "phone/request_code", to: "phone#request_code"
+      post "phone/verify_code",  to: "phone#verify_code"
+
+      # 🔐 AUTH
       post :signup, to: "auth#signup"
       post :login,  to: "auth#login"
       post :logout, to: "auth#logout"
     end
+
+    # 🧠 Twilio Webhooks
+    post "twilio_webhooks/voice_bridge", to: "twilio_webhooks#voice_bridge"
+    post "twilio_webhooks/call_status",  to: "twilio_webhooks#call_status"
+    post "twilio_webhooks/message_status", to: "twilio_webhooks#message_status"
 
     post "ask_mom", to: "ask_mom#create"
 

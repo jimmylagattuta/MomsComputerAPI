@@ -6,6 +6,31 @@ class TwilioService
     )
   end
 
+  def self.send_sms(to:, body:)
+    Rails.logger.info("📲 [Twilio] Sending SMS to #{to}")
+
+    status_callback_url =
+      if ENV["APP_BASE_URL"].present?
+        "#{ENV.fetch("APP_BASE_URL")}/v1/twilio_webhooks/message_status"
+      end
+
+    Rails.logger.info("🔗 [Twilio] SMS status callback URL=#{status_callback_url.inspect}")
+
+    message = client.messages.create(
+      from: ENV.fetch("TWILIO_PHONE_NUMBER"),
+      to: to,
+      body: body,
+      status_callback: status_callback_url
+    )
+
+    Rails.logger.info("✅ [Twilio] Sent successfully SID=#{message.sid}")
+    message
+  rescue => e
+    Rails.logger.error("❌ [Twilio ERROR] #{e.class} - #{e.message}")
+    Rails.logger.error(e.backtrace.first(10).join("\n")) if e.backtrace.present?
+    raise e
+  end
+
   def self.start_support_call!(support_call_session:, user_phone_number:)
     base_url = ENV.fetch("APP_BASE_URL")
 
