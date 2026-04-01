@@ -2,6 +2,10 @@ Rails.application.routes.draw do
   # ✅ ActionCable endpoint
   mount ActionCable.server => "/cable"
 
+  get   "password_resets/edit", to: "password_resets#edit"
+  post  "password_resets",      to: "password_resets#update"
+  patch "password_resets",      to: "password_resets#update"
+
   namespace :v1 do
     post "devices/register", to: "devices#register"
 
@@ -30,9 +34,13 @@ Rails.application.routes.draw do
       post "phone/verify_code",  to: "phone#verify_code"
 
       # 🔐 AUTH
-      post :signup, to: "auth#signup"
-      post :login,  to: "auth#login"
-      post :logout, to: "auth#logout"
+      post  :signup,          to: "auth#signup"
+      post  :login,           to: "auth#login"
+      post  :logout,          to: "auth#logout"
+      patch :change_password, to: "auth#change_password"
+
+      post  :forgot_password, to: "password_resets#create"
+      patch :reset_password,  to: "password_resets#update"
     end
 
     # 🧠 Twilio Webhooks

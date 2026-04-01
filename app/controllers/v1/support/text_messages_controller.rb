@@ -42,16 +42,16 @@ class V1::Support::TextMessagesController < ApplicationController
         .join(" ")
         .presence || current_user.email
 
-    Rails.logger.info("======== SUPPORT TEXT ADMIN CREATE ========")
-    Rails.logger.info("RAW PARAMS: #{params.to_unsafe_h.except(:images).inspect}")
-    Rails.logger.info("THREAD ID: #{thread.id}")
-    Rails.logger.info("ADMIN USER ID: #{current_user.id}")
-    Rails.logger.info("ADMIN USER NAME: #{admin_display_name}")
-    Rails.logger.info("BODY: #{cleaned_body.inspect}")
-    Rails.logger.info("SIGNED IDS COUNT: #{cleaned_image_signed_ids.length}")
-    Rails.logger.info("UPLOADED IMAGES COUNT: #{uploaded_images.length}")
-    Rails.logger.info("UPLOADED IMAGES CLASS: #{uploaded_images.map(&:class).inspect}")
-    Rails.logger.info("===========================================")
+    # Rails.logger.info("======== SUPPORT TEXT ADMIN CREATE ========")
+    # Rails.logger.info("RAW PARAMS: #{params.to_unsafe_h.except(:images).inspect}")
+    # Rails.logger.info("THREAD ID: #{thread.id}")
+    # Rails.logger.info("ADMIN USER ID: #{current_user.id}")
+    # Rails.logger.info("ADMIN USER NAME: #{admin_display_name}")
+    # Rails.logger.info("BODY: #{cleaned_body.inspect}")
+    # Rails.logger.info("SIGNED IDS COUNT: #{cleaned_image_signed_ids.length}")
+    # Rails.logger.info("UPLOADED IMAGES COUNT: #{uploaded_images.length}")
+    # Rails.logger.info("UPLOADED IMAGES CLASS: #{uploaded_images.map(&:class).inspect}")
+    # Rails.logger.info("===========================================")
 
     if cleaned_body.blank? && cleaned_image_signed_ids.blank? && uploaded_images.blank?
       return render json: { error: "Message content is required." }, status: :unprocessable_entity

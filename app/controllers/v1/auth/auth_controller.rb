@@ -3,6 +3,8 @@ module V1
     class AuthController < ApplicationController
       include JwtAuth
 
+      before_action :authenticate_user!, only: [:logout, :change_password]
+
       def signup
         user = User.new(signup_params)
         user.role ||= "senior"
@@ -28,7 +30,6 @@ module V1
         end
       end
 
-      # REAL logout: revoke the current token
       def logout
         token = bearer_token
         payload = token.present? ? decode_jwt(token) : nil
@@ -53,6 +54,50 @@ module V1
         render json: { ok: true }
       end
 
+      def change_password
+        Rails.logger.info(
+          "🔑 [AUTH] change_password user_id=#{current_user&.id} current_present=#{change_password_params[:current_password].present?} new_present=#{change_password_params[:password].present?} confirm_present=#{change_password_params[:password_confirmation].present?}"
+        )
+
+        unless current_user.authenticate(change_password_params[:current_password])
+          Rails.logger.info("🔑 [AUTH] current password check failed for user_id=#{current_user&.id}")
+
+          return render json: {
+            error: "invalid_current_password",
+            message: "Current password is incorrect"
+          }, status: :unprocessable_entity
+        end
+
+        if change_password_params[:current_password] == change_password_params[:password]
+          Rails.logger.info("🔑 [AUTH] new password matched current password for user_id=#{current_user&.id}")
+
+          return render json: {
+            error: "password_unchanged",
+            message: "New password must be different from your current password"
+          }, status: :unprocessable_entity
+        end
+
+        if current_user.update(
+          password: change_password_params[:password],
+          password_confirmation: change_password_params[:password_confirmation]
+        )
+          Rails.logger.info("🔑 [AUTH] password updated for user_id=#{current_user&.id}")
+
+          render json: {
+            ok: true,
+            message: "Your password has been updated successfully"
+          }
+        else
+          Rails.logger.info("🔑 [AUTH] password update validation failed for user_id=#{current_user&.id}: #{current_user.errors.full_messages.join(', ')}")
+
+          render json: {
+            error: "validation_error",
+            details: current_user.errors.full_messages,
+            message: current_user.errors.full_messages.to_sentence
+          }, status: :unprocessable_entity
+        end
+      end
+
       private
 
       def signup_params
@@ -65,6 +110,14 @@ module V1
 
       def login_params
         params.require(:user).permit(:email, :password).tap { |p| p[:email] = p[:email].to_s.downcase }
+      end
+
+      def change_password_params
+        if params[:auth].present?
+          params.require(:auth).permit(:current_password, :password, :password_confirmation)
+        else
+          params.permit(:current_password, :password, :password_confirmation)
+        end
       end
 
       def jwt_for(user)

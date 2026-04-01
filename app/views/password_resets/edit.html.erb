@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Reset Password</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #0b1220;
+        color: #0b1220;
+      }
+
+      .wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .card {
+        width: 100%;
+        max-width: 420px;
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 28px;
+      }
+
+      p.sub {
+        margin: 0 0 18px 0;
+        color: #667085;
+      }
+
+      .error {
+        background: #fef3f2;
+        color: #b42318;
+        border: 1px solid #fecdca;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 14px;
+      }
+
+      label {
+        display: block;
+        font-size: 14px;
+        margin: 14px 0 6px;
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid #d7dee8;
+        font-size: 16px;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 18px;
+        border: 0;
+        border-radius: 999px;
+        padding: 15px 18px;
+        background: #1e73e8;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .email {
+        font-size: 14px;
+        color: #667085;
+        margin-bottom: 8px;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Reset Password</h1>
+        <p class="sub">Enter your new password below.</p>
+
+        <div class="email"><strong>Email:</strong> <%= @email %></div>
+
+        <% if @error.present? %>
+          <div class="error"><%= @error %></div>
+        <% end %>
+
+        <%= form_with url: "/password_resets", method: :patch, local: true do %>
+          <%= hidden_field_tag :token, @token %>
+          <%= hidden_field_tag :email, @email %>
+
+          <label for="password">New password</label>
+          <%= password_field_tag :password, nil, required: true, minlength: 8, autocomplete: "new-password" %>
+
+          <label for="password_confirmation">Confirm new password</label>
+          <%= password_field_tag :password_confirmation, nil, required: true, minlength: 8, autocomplete: "new-password" %>
+
+          <button type="submit">Reset Password</button>
+        <% end %>
+      </div>
+    </div>
+  </body>
+</html>
