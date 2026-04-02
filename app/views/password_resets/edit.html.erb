@@ -168,13 +168,13 @@
 
           <label for="password">New password</label>
           <div class="input-wrap">
-            <%= password_field_tag :password, nil, id: "password", required: true, minlength: 8, autocomplete: "new-password" %>
+            <%= password_field_tag :password, nil, id: "password", required: true, minlength: 8, autocomplete: "new-password", autocapitalize: "off" %>
             <button type="button" class="toggle-password" data-target="password">Show</button>
           </div>
 
           <label for="password_confirmation">Confirm new password</label>
           <div class="input-wrap">
-            <%= password_field_tag :password_confirmation, nil, id: "password_confirmation", required: true, minlength: 8, autocomplete: "new-password" %>
+            <%= password_field_tag :password_confirmation, nil, id: "password_confirmation", required: true, minlength: 8, autocomplete: "new-password", autocapitalize: "off" %>
             <button type="button" class="toggle-password" data-target="password_confirmation">Show</button>
           </div>
 
