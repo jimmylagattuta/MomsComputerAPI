@@ -16,6 +16,7 @@ gem "image_processing", "~> 1.2"
 gem "dry-validation"
 gem "aws-sdk-s3", require: false
 gem "twilio-ruby"
+gem "redis"
 
 gem "tzinfo-data", platforms: %i[ mswin mswin64 mingw x64_mingw jruby ]
 gem "bootsnap", require: false
