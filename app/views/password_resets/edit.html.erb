@@ -54,16 +54,47 @@
         font-weight: 600;
       }
 
+      .input-wrap {
+        position: relative;
+      }
+
       input {
         width: 100%;
         box-sizing: border-box;
-        padding: 14px 16px;
+        padding: 14px 52px 14px 16px;
         border-radius: 14px;
         border: 1px solid #d7dee8;
         font-size: 16px;
       }
 
-      button {
+      input:focus {
+        outline: none;
+        border-color: #1e73e8;
+        box-shadow: 0 0 0 3px rgba(30, 115, 232, 0.12);
+      }
+
+      .toggle-password {
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        color: #667085;
+        cursor: pointer;
+        padding: 4px;
+        margin: 0;
+        width: auto;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .toggle-password:hover {
+        color: #1e73e8;
+      }
+
+      button[type="submit"] {
         width: 100%;
         margin-top: 18px;
         border: 0;
@@ -101,14 +132,39 @@
           <%= hidden_field_tag :email, @email %>
 
           <label for="password">New password</label>
-          <%= password_field_tag :password, nil, required: true, minlength: 8, autocomplete: "new-password" %>
+          <div class="input-wrap">
+            <%= password_field_tag :password, nil, id: "password", required: true, minlength: 8, autocomplete: "new-password" %>
+            <button type="button" class="toggle-password" data-target="password">Show</button>
+          </div>
 
           <label for="password_confirmation">Confirm new password</label>
-          <%= password_field_tag :password_confirmation, nil, required: true, minlength: 8, autocomplete: "new-password" %>
+          <div class="input-wrap">
+            <%= password_field_tag :password_confirmation, nil, id: "password_confirmation", required: true, minlength: 8, autocomplete: "new-password" %>
+            <button type="button" class="toggle-password" data-target="password_confirmation">Show</button>
+          </div>
 
           <button type="submit">Reset Password</button>
         <% end %>
       </div>
     </div>
+
+    <script>
+      document.querySelectorAll(".toggle-password").forEach(function(button) {
+        button.addEventListener("click", function() {
+          var targetId = button.getAttribute("data-target");
+          var input = document.getElementById(targetId);
+
+          if (!input) return;
+
+          if (input.type === "password") {
+            input.type = "text";
+            button.textContent = "Hide";
+          } else {
+            input.type = "password";
+            button.textContent = "Show";
+          }
+        });
+      });
+    </script>
   </body>
 </html>
