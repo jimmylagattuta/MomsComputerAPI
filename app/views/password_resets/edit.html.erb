@@ -14,7 +14,25 @@
       .wrap {
         min-height: 100vh;
         display: flex;
-        align-items: center;
+        flex-direction: column;
+      }
+
+      .logo-band {
+        width: 100%;
+        background: #ffffff;
+        overflow: hidden;
+      }
+
+      .logo-band img {
+        width: 100%;
+        display: block;
+        height: auto;
+      }
+
+      .content {
+        flex: 1;
+        display: flex;
+        align-items: flex-start;
         justify-content: center;
         padding: 24px;
       }
@@ -148,41 +166,61 @@
         margin-bottom: 8px;
         word-break: break-word;
       }
+
+      @media (max-width: 480px) {
+        .content {
+          padding: 18px;
+        }
+
+        .card {
+          padding: 20px;
+          border-radius: 18px;
+        }
+      }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <div class="card">
-        <h1>Reset Password</h1>
-        <p class="sub">Enter your new password below.</p>
+      <div class="logo-band">
+        <img
+          src="https://res.cloudinary.com/djtsuktwb/image/upload/v1769703507/ChatGPT_Image_Jan_29_2026_08_00_07_AM_1_3_gtqeo8.jpg"
+          alt="Mom's Computer logo"
+        />
+      </div>
 
-        <div class="email"><strong>Email:</strong> <%= @email %></div>
+      <div class="content">
+        <div class="card">
+          <h1>Reset Password</h1>
+          <p class="sub">Enter your new password below.</p>
 
-        <% if @error.present? %>
-          <div class="error"><%= @error %></div>
-        <% end %>
+          <div class="email"><strong>Email:</strong> <%= @email %></div>
 
-        <%= form_with url: "/password_resets", method: :patch, local: true, html: { id: "reset-password-form" } do %>
-          <%= hidden_field_tag :token, @token %>
-          <%= hidden_field_tag :email, @email %>
+          <% if @error.present? %>
+            <div class="error"><%= @error %></div>
+          <% end %>
 
-          <label for="password">New password</label>
-          <div class="input-wrap">
-            <%= password_field_tag :password, nil, id: "password", required: true, minlength: 8, autocomplete: "new-password", autocapitalize: "off" %>
-            <button type="button" class="toggle-password" data-target="password">Show</button>
-          </div>
+          <%= form_with url: "/password_resets", method: :patch, local: true, html: { id: "reset-password-form" } do %>
+            <%= hidden_field_tag :token, @token %>
+            <%= hidden_field_tag :email, @email %>
 
-          <label for="password_confirmation">Confirm new password</label>
-          <div class="input-wrap">
-            <%= password_field_tag :password_confirmation, nil, id: "password_confirmation", required: true, minlength: 8, autocomplete: "new-password", autocapitalize: "off" %>
-            <button type="button" class="toggle-password" data-target="password_confirmation">Show</button>
-          </div>
+            <label for="password">New password</label>
+            <div class="input-wrap">
+              <%= password_field_tag :password, nil, id: "password", required: true, minlength: 8, autocomplete: "new-password", autocapitalize: "off" %>
+              <button type="button" class="toggle-password" data-target="password">Show</button>
+            </div>
 
-          <button type="submit" class="submit-btn" id="submit-btn">
-            <span class="spinner" aria-hidden="true"></span>
-            <span class="submit-label">Reset Password</span>
-          </button>
-        <% end %>
+            <label for="password_confirmation">Confirm new password</label>
+            <div class="input-wrap">
+              <%= password_field_tag :password_confirmation, nil, id: "password_confirmation", required: true, minlength: 8, autocomplete: "new-password", autocapitalize: "off" %>
+              <button type="button" class="toggle-password" data-target="password_confirmation">Show</button>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submit-btn">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="submit-label">Reset Password</span>
+            </button>
+          <% end %>
+        </div>
       </div>
     </div>
 
