@@ -94,7 +94,7 @@
         color: #1e73e8;
       }
 
-      button[type="submit"] {
+      .submit-btn {
         width: 100%;
         margin-top: 18px;
         border: 0;
@@ -105,6 +105,41 @@
         font-size: 16px;
         font-weight: 700;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+
+      .submit-btn:hover {
+        opacity: 0.95;
+      }
+
+      .submit-btn:disabled {
+        opacity: 0.75;
+        cursor: not-allowed;
+      }
+
+      .spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: spin 0.75s linear infinite;
+        display: none;
+        flex-shrink: 0;
+      }
+
+      .submit-btn.loading .spinner {
+        display: inline-block;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
 
       .email {
@@ -127,7 +162,7 @@
           <div class="error"><%= @error %></div>
         <% end %>
 
-        <%= form_with url: "/password_resets", method: :patch, local: true do %>
+        <%= form_with url: "/password_resets", method: :patch, local: true, html: { id: "reset-password-form" } do %>
           <%= hidden_field_tag :token, @token %>
           <%= hidden_field_tag :email, @email %>
 
@@ -143,7 +178,10 @@
             <button type="button" class="toggle-password" data-target="password_confirmation">Show</button>
           </div>
 
-          <button type="submit">Reset Password</button>
+          <button type="submit" class="submit-btn" id="submit-btn">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="submit-label">Reset Password</span>
+          </button>
         <% end %>
       </div>
     </div>
@@ -165,6 +203,19 @@
           }
         });
       });
+
+      var form = document.getElementById("reset-password-form");
+      var submitBtn = document.getElementById("submit-btn");
+
+      if (form && submitBtn) {
+        form.addEventListener("submit", function() {
+          submitBtn.disabled = true;
+          submitBtn.classList.add("loading");
+
+          var label = submitBtn.querySelector(".submit-label");
+          if (label) label.textContent = "Resetting...";
+        });
+      }
     </script>
   </body>
 </html>
