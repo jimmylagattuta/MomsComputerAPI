@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Mom's Computer SMS Consent Flow</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f6f8fb;
+        color: #0b1220;
+      }
+
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 20px 60px;
+      }
+
+      .hero,
+      .section {
+        background: #ffffff;
+        border: 1px solid #d7dee8;
+        border-radius: 24px;
+        padding: 28px;
+        margin-bottom: 24px;
+        box-shadow: 0 10px 30px rgba(16, 24, 40, 0.06);
+      }
+
+      h1 {
+        margin: 0 0 12px 0;
+        font-size: 34px;
+        line-height: 1.1;
+      }
+
+      h2 {
+        margin: 0 0 12px 0;
+        font-size: 24px;
+      }
+
+      p {
+        font-size: 16px;
+        line-height: 1.7;
+        margin: 0 0 14px 0;
+      }
+
+      .note {
+        background: #f3f7ff;
+        border: 1px solid #d6e6ff;
+        border-radius: 16px;
+        padding: 16px 18px;
+        margin-top: 18px;
+      }
+
+      .legal-links {
+        margin-top: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .legal-links a {
+        display: inline-block;
+        text-decoration: none;
+        color: #ffffff;
+        background: #1e73e8;
+        padding: 10px 14px;
+        border-radius: 999px;
+        font-weight: 600;
+      }
+
+      .steps {
+        margin: 0;
+        padding-left: 22px;
+      }
+
+      .steps li {
+        margin-bottom: 10px;
+        line-height: 1.7;
+        font-size: 16px;
+      }
+
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+        margin-top: 20px;
+      }
+
+      .shot {
+        background: #f8fafc;
+        border: 1px solid #d7dee8;
+        border-radius: 20px;
+        overflow: hidden;
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .caption {
+        padding: 12px 14px 16px;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #475467;
+      }
+
+      .footer-note {
+        margin-top: 12px;
+        font-size: 14px;
+        color: #667085;
+      }
+
+      a.inline-link {
+        color: #1e73e8;
+        font-weight: 600;
+      }
+
+      @media (max-width: 640px) {
+        .wrap {
+          padding: 18px 12px 40px;
+        }
+
+        .hero,
+        .section {
+          padding: 18px;
+          border-radius: 18px;
+        }
+
+        h1 {
+          font-size: 28px;
+        }
+
+        h2 {
+          font-size: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <h1>Mom’s Computer SMS Consent Flow</h1>
+        <p>
+          This page documents the in-app SMS consent and phone verification flow used by Mom’s Computer.
+          Users enter their mobile phone number during signup and receive a one-time 6-digit verification
+          code before account creation is completed.
+        </p>
+        <p>
+          The signup screen includes links to the Privacy Policy and Terms &amp; Conditions, plus
+          SMS disclosure language stating that transactional messages may be sent for account
+          verification and support.
+        </p>
+
+        <div class="note">
+          <p><strong>Program type:</strong> Transactional / account verification / support-related SMS</p>
+          <p><strong>Message frequency:</strong> Varies based on user activity</p>
+          <p><strong>Opt-out:</strong> Reply STOP to opt out</p>
+          <p><strong>Help:</strong> Reply HELP for help</p>
+          <p><strong>Rates:</strong> Message and data rates may apply</p>
+        </div>
+
+        <div class="legal-links">
+          <a href="/privacy-policy">Privacy Policy</a>
+          <a href="/terms-and-conditions">Terms &amp; Conditions</a>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>How users opt in</h2>
+        <ol class="steps">
+          <li>User opens the Mom’s Computer signup screen and begins account creation.</li>
+          <li>User enters first name, last name, email address, phone number, and password.</li>
+          <li>User taps <strong>Send Code</strong> to request a one-time verification text message.</li>
+          <li>User receives the SMS code and enters it into the app to verify the phone number.</li>
+          <li>User sees legal links and SMS disclosure language on the signup screen before finishing account creation.</li>
+        </ol>
+
+        <p class="footer-note">
+          Privacy Policy:
+          <a class="inline-link" href="/privacy-policy">/privacy-policy</a><br />
+          Terms &amp; Conditions:
+          <a class="inline-link" href="/terms-and-conditions">/terms-and-conditions</a>
+        </p>
+      </div>
+
+      <div class="section">
+        <h2>Signup flow screenshots</h2>
+
+        <div class="gallery">
+          <div class="shot">
+            <img src="/sms-consent/screen-1-signup-context.png" alt="Signup context screen" />
+            <div class="caption">
+              Signup context showing the account creation form and the phone number section within the normal signup flow.
+            </div>
+          </div>
+
+          <div class="shot">
+            <img src="/sms-consent/screen-2-send-code.png" alt="Send code step" />
+            <div class="caption">
+              User enters a mobile phone number and taps <strong>Send Code</strong> to request a one-time verification SMS.
+            </div>
+          </div>
+
+          <div class="shot">
+            <img src="/sms-consent/screen-3-verify-code.png" alt="Verify code step" />
+            <div class="caption">
+              User enters the 6-digit verification code received by text message to verify the phone number.
+            </div>
+          </div>
+
+          <div class="shot">
+            <img src="/sms-consent/screen-4-legal-disclosure.png" alt="Legal disclosure" />
+            <div class="caption">
+              Signup screen showing the <strong>Terms &amp; Conditions</strong>, <strong>Privacy Policy</strong>, and SMS disclosure language for transactional messages.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
