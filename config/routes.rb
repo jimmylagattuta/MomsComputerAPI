@@ -1,7 +1,7 @@
 Rails.application.routes.draw do
   get "public_pages/sms_consent"
   # ✅ Public pages for compliance / legal
-  get "/sms_consent", to: "public_pages#sms_consent"
+  get "/sms-consent", to: "public_pages#sms_consent"
 
   # ✅ ActionCable endpoint
   mount ActionCable.server => "/cable"

@@ -1,7 +1,5 @@
-class PublicPagesController < ApplicationController
-  skip_before_action :verify_authenticity_token, raise: false
-
+class PublicPagesController < ActionController::Base
   def sms_consent
-      render :sms_consent
+    render :sms_consent, layout: false
   end
 end
