@@ -94,10 +94,21 @@
         overflow: hidden;
       }
 
+      .shot-link {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+      }
+
       .shot img {
         display: block;
         width: 100%;
         height: auto;
+        transition: transform 0.18s ease;
+      }
+
+      .shot-link:hover img {
+        transform: scale(1.02);
       }
 
       .caption {
@@ -105,6 +116,14 @@
         font-size: 14px;
         line-height: 1.5;
         color: #475467;
+      }
+
+      .click-note {
+        display: inline-block;
+        margin-top: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #1e73e8;
       }
 
       .footer-note {
@@ -191,30 +210,62 @@
 
         <div class="gallery">
           <div class="shot">
-            <img src="/sms-consent/screen-1-signup-top.png" alt="Signup context screen" />
+            <a
+              class="shot-link"
+              href="/sms-consent/screen-1-signup-top.png"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img src="/sms-consent/screen-1-signup-top.png" alt="Signup context screen" />
+            </a>
             <div class="caption">
               Signup context showing the account creation form and the phone number section within the normal signup flow.
+              <div class="click-note">Click image to open full size</div>
             </div>
           </div>
 
           <div class="shot">
-            <img src="/sms-consent/screen-3-send-code.png" alt="Send code step" />
+            <a
+              class="shot-link"
+              href="/sms-consent/screen-3-send-code.png"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img src="/sms-consent/screen-3-send-code.png" alt="Send code step" />
+            </a>
             <div class="caption">
               User enters a mobile phone number and taps <strong>Send Code</strong> to request a one-time verification SMS.
+              <div class="click-note">Click image to open full size</div>
             </div>
           </div>
 
           <div class="shot">
-            <img src="/sms-consent/screen-2-phone-code.png" alt="Verify code step" />
+            <a
+              class="shot-link"
+              href="/sms-consent/screen-2-phone-code.png"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img src="/sms-consent/screen-2-phone-code.png" alt="Verify code step" />
+            </a>
             <div class="caption">
               User enters the 6-digit verification code received by text message to verify the phone number.
+              <div class="click-note">Click image to open full size</div>
             </div>
           </div>
 
           <div class="shot">
-            <img src="/sms-consent/screen-4-legal-copy.png" alt="Legal disclosure" />
+            <a
+              class="shot-link"
+              href="/sms-consent/screen-4-legal-copy.png"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img src="/sms-consent/screen-4-legal-copy.png" alt="Legal disclosure" />
+            </a>
             <div class="caption">
               Signup screen showing the <strong>Terms &amp; Conditions</strong>, <strong>Privacy Policy</strong>, and SMS disclosure language for transactional messages.
+              <div class="click-note">Click image to open full size</div>
             </div>
           </div>
         </div>
