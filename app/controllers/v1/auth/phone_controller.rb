@@ -29,31 +29,23 @@ module V1
           }, status: :too_many_requests
         end
 
-        code = format("%06d", rand(0..999999))
-        code_digest = digest(code)
         now_iso = Time.current.iso8601
 
-        Rails.cache.write(code_digest_key(phone), code_digest, expires_in: CODE_TTL)
         Rails.cache.write(sent_at_key(phone), now_iso, expires_in: CODE_TTL)
         Rails.cache.write(attempts_key(phone), 0, expires_in: CODE_TTL)
 
-        stored_digest_after_write = Rails.cache.read(code_digest_key(phone))
         stored_sent_at_after_write = Rails.cache.read(sent_at_key(phone))
         stored_attempts_after_write = Rails.cache.read(attempts_key(phone))
 
         Rails.logger.info("📨 [PhoneController] Requesting verification code for #{phone}")
-        Rails.logger.info("🧪 [PhoneController] DEV verification code for #{phone}: #{code}") if Rails.env.development?
         Rails.logger.info("🗄️ [PhoneController] Cache store class: #{Rails.cache.class.name}")
-        Rails.logger.info("🗄️ [PhoneController] Stored digest after write: #{stored_digest_after_write.inspect}")
         Rails.logger.info("🗄️ [PhoneController] Stored sent_at after write: #{stored_sent_at_after_write.inspect}")
         Rails.logger.info("🗄️ [PhoneController] Stored attempts after write: #{stored_attempts_after_write.inspect}")
 
-        TwilioService.send_sms(
-          to: phone,
-          body: "Your Mom's Computer code is #{code}"
-        )
+        verification = TwilioService.send_verification_code(to: phone)
 
         Rails.logger.info("✅ [PhoneController] Verification code sent to #{phone}")
+        Rails.logger.info("✅ [PhoneController] Twilio Verify SID=#{verification.sid} status=#{verification.status}")
 
         render json: {
           ok: true,
@@ -74,20 +66,22 @@ module V1
         return render json: { error: "invalid_phone" }, status: :unprocessable_entity if phone.blank?
         return render json: { error: "verification_code_invalid" }, status: :unprocessable_entity if code.length != 6
 
-        stored_digest = Rails.cache.read(code_digest_key(phone))
         stored_sent_at = Rails.cache.read(sent_at_key(phone))
         attempts = Rails.cache.read(attempts_key(phone)).to_i
 
         Rails.logger.info("🗄️ [PhoneController] Verify cache store class: #{Rails.cache.class.name}")
-        Rails.logger.info("🗄️ [PhoneController] Verify stored digest for #{phone}: #{stored_digest.inspect}")
         Rails.logger.info("🗄️ [PhoneController] Verify stored sent_at for #{phone}: #{stored_sent_at.inspect}")
         Rails.logger.info("🗄️ [PhoneController] Verify attempts for #{phone}: #{attempts.inspect}")
         Rails.logger.info("🧪 [PhoneController] Submitted code for #{phone}: #{code}") if Rails.env.development?
 
-        return render json: { error: "verification_code_expired" }, status: :unprocessable_entity if stored_digest.blank?
+        return render json: { error: "verification_code_expired" }, status: :unprocessable_entity if stored_sent_at.blank?
         return render json: { error: "verification_code_expired" }, status: :unprocessable_entity if attempts >= MAX_ATTEMPTS
 
-        unless secure_compare(stored_digest, digest(code))
+        verification_check = TwilioService.check_verification_code(to: phone, code: code)
+
+        Rails.logger.info("🔍 [PhoneController] Twilio Verify check SID=#{verification_check.sid} status=#{verification_check.status}")
+
+        unless verification_check.status == "approved"
           attempts += 1
           Rails.cache.write(attempts_key(phone), attempts, expires_in: CODE_TTL)
           Rails.logger.info("❌ [PhoneController] Invalid code for #{phone}; attempts now #{attempts}")

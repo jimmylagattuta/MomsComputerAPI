@@ -11,10 +11,19 @@ module V1
         user.status ||= "active"
 
         if user.save
+          begin
+            UserMailer.welcome_email(user).deliver_later
+          rescue => e
+            Rails.logger.error("❌ [AUTH] welcome email failed for user_id=#{user.id}: #{e.class} - #{e.message}")
+          end
+
           token = jwt_for(user)
           render json: { token: token, user: user_payload(user) }, status: :created
         else
-          render json: { error: "validation_error", details: user.errors.full_messages }, status: :unprocessable_entity
+          render json: {
+            error: "validation_error",
+            details: user.errors.full_messages
+          }, status: :unprocessable_entity
         end
       end
 
@@ -23,6 +32,8 @@ module V1
 
         if user&.authenticate(login_params[:password])
           user.update(last_login_at: Time.current, last_seen_at: Time.current)
+          user.reload
+
           token = jwt_for(user)
           render json: { token: token, user: user_payload(user) }
         else
@@ -88,7 +99,9 @@ module V1
             message: "Your password has been updated successfully"
           }
         else
-          Rails.logger.info("🔑 [AUTH] password update validation failed for user_id=#{current_user&.id}: #{current_user.errors.full_messages.join(', ')}")
+          Rails.logger.info(
+            "🔑 [AUTH] password update validation failed for user_id=#{current_user&.id}: #{current_user.errors.full_messages.join(', ')}"
+          )
 
           render json: {
             error: "validation_error",
@@ -102,14 +115,22 @@ module V1
 
       def signup_params
         params.require(:user).permit(
-          :email, :password, :password_confirmation,
-          :first_name, :last_name, :phone, :preferred_name,
-          :preferred_language, :timezone
+          :email,
+          :password,
+          :password_confirmation,
+          :first_name,
+          :last_name,
+          :phone,
+          :preferred_name,
+          :preferred_language,
+          :timezone
         ).tap { |p| p[:email] = p[:email].to_s.downcase }
       end
 
       def login_params
-        params.require(:user).permit(:email, :password).tap { |p| p[:email] = p[:email].to_s.downcase }
+        params.require(:user).permit(:email, :password).tap do |p|
+          p[:email] = p[:email].to_s.downcase
+        end
       end
 
       def change_password_params
@@ -132,9 +153,17 @@ module V1
           status: user.status,
           first_name: user.first_name,
           last_name: user.last_name,
+          phone: user.phone,
           preferred_name: user.preferred_name,
           preferred_language: user.preferred_language,
-          timezone: user.timezone
+          timezone: user.timezone,
+          date_of_birth: user.date_of_birth,
+          marketing_opt_in: user.marketing_opt_in,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+          last_login_at: user.last_login_at,
+          last_seen_at: user.last_seen_at,
+          phone_verified_at: user.phone_verified_at
         }
       end
     end

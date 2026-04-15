@@ -1,7 +1,59 @@
-<h1>Welcome to Mom's Computer</h1>
+<!DOCTYPE html>
+<html>
+  <body style="margin: 0; padding: 0; background-color: #f4f7fb; font-family: Arial, Helvetica, sans-serif; color: #0B1220;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f7fb; padding: 24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 640px; background-color: #ffffff; border: 1px solid #d7dee8; border-radius: 18px; overflow: hidden;">
+            <tr>
+              <td style="background-color: #0B1220; padding: 28px 32px; text-align: center;">
+                <h1 style="margin: 0; color: #ffffff; font-size: 28px; line-height: 1.2;">
+                  Welcome to Mom's Computer
+                </h1>
+              </td>
+            </tr>
 
-<p>Hi <%= @user.email %>,</p>
+            <tr>
+              <td style="padding: 32px;">
+                <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6;">
+                  Hi <%= @first_name %>,
+                </p>
 
-<p>Your account has been created successfully.</p>
+                <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6;">
+                  Welcome to Mom's Computer. Your account has been created successfully, and you're ready to start using the app.
+                </p>
 
-<p>Welcome aboard.</p>
+                <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6;">
+                  Inside the app, you can:
+                </p>
+
+                <ul style="margin: 0 0 20px 20px; padding: 0; font-size: 16px; line-height: 1.7; color: #0B1220;">
+                  <li>Ask Mom when something feels suspicious</li>
+                  <li>Email or text Mom for non-urgent help</li>
+                  <li>Manage your account and profile settings</li>
+                </ul>
+
+                <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6;">
+                  If you ever need help, just reply to this email or reach out to support.
+                </p>
+
+                <p style="margin: 24px 0 0; font-size: 16px; line-height: 1.6;">
+                  We're glad you're here,<br>
+                  <strong>Mom's Computer</strong>
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding: 20px 32px; background-color: #f8fbff; border-top: 1px solid #e8eef7; text-align: center;">
+                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #667085;">
+                  Mom's Computer Scam Helpline
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

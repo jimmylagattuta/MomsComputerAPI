@@ -1,9 +1,7 @@
 Rails.application.routes.draw do
   get "public_pages/sms_consent"
-  # ✅ Public pages for compliance / legal
   get "/sms-consent", to: "public_pages#sms_consent"
 
-  # ✅ ActionCable endpoint
   mount ActionCable.server => "/cable"
 
   get   "password_resets/edit", to: "password_resets#edit"
@@ -30,14 +28,20 @@ Rails.application.routes.draw do
       end
     end
 
+    namespace :admin do
+      get "dashboard", to: "dashboard#show"
+
+      resources :users, only: [:index, :show, :update]
+      resources :subscriptions, only: [:index, :show, :update]
+      resources :support_threads, only: [:index, :show]
+    end
+
     get "me", to: "me#show"
 
     namespace :auth do
-      # 🔥 PHONE VERIFICATION
       post "phone/request_code", to: "phone#request_code"
       post "phone/verify_code",  to: "phone#verify_code"
 
-      # 🔐 AUTH
       post  :signup,          to: "auth#signup"
       post  :login,           to: "auth#login"
       post  :logout,          to: "auth#logout"
@@ -47,7 +51,6 @@ Rails.application.routes.draw do
       patch :reset_password,  to: "password_resets#update"
     end
 
-    # 🧠 Twilio Webhooks
     post "twilio_webhooks/voice_bridge", to: "twilio_webhooks#voice_bridge"
     post "twilio_webhooks/call_status",  to: "twilio_webhooks#call_status"
     post "twilio_webhooks/message_status", to: "twilio_webhooks#message_status"
@@ -62,4 +65,7 @@ Rails.application.routes.draw do
 
     resources :escalations, only: [:create]
   end
+
+  get "/portal", to: "portal#index"
+  get "/portal/*path", to: "portal#index"
 end

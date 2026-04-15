@@ -1,6 +1,9 @@
 class UserMailer < ApplicationMailer
+  default from: ENV.fetch("MAILER_FROM_EMAIL", "support@momscomputer.com")
+
   def welcome_email(user)
     @user = user
+    @first_name = user.preferred_name.presence || user.first_name.presence || "there"
 
     mail(
       to: @user.email,

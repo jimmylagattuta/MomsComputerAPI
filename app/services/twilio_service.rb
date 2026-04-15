@@ -31,6 +31,44 @@ class TwilioService
     raise e
   end
 
+  def self.send_verification_code(to:)
+    Rails.logger.info("📲 [Twilio Verify] Sending verification code to #{to}")
+
+    verification = client.verify.v2
+      .services(ENV.fetch("TWILIO_VERIFY_SERVICE_SID"))
+      .verifications
+      .create(
+        to: to,
+        channel: "sms"
+      )
+
+    Rails.logger.info("✅ [Twilio Verify] Verification started SID=#{verification.sid} status=#{verification.status}")
+    verification
+  rescue => e
+    Rails.logger.error("❌ [Twilio Verify ERROR - send_verification_code] #{e.class} - #{e.message}")
+    Rails.logger.error(e.backtrace.first(10).join("\n")) if e.backtrace.present?
+    raise e
+  end
+
+  def self.check_verification_code(to:, code:)
+    Rails.logger.info("🔍 [Twilio Verify] Checking verification code for #{to}")
+
+    verification_check = client.verify.v2
+      .services(ENV.fetch("TWILIO_VERIFY_SERVICE_SID"))
+      .verification_checks
+      .create(
+        to: to,
+        code: code
+      )
+
+    Rails.logger.info("✅ [Twilio Verify] Check complete SID=#{verification_check.sid} status=#{verification_check.status}")
+    verification_check
+  rescue => e
+    Rails.logger.error("❌ [Twilio Verify ERROR - check_verification_code] #{e.class} - #{e.message}")
+    Rails.logger.error(e.backtrace.first(10).join("\n")) if e.backtrace.present?
+    raise e
+  end
+
   def self.start_support_call!(support_call_session:, user_phone_number:)
     base_url = ENV.fetch("APP_BASE_URL")
 
