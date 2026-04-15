@@ -13,21 +13,41 @@ export default function Login() {
     return email.trim() && password.trim() && !isLoading;
   }, [email, password, isLoading]);
 
-  const extractErrorMessage = (data) => {
-    if (!data) return "Sign in failed. Please try again.";
+  const extractErrorMessage = (data, response) => {
+    const raw =
+      (typeof data === "string" && data) ||
+      data?.error ||
+      data?.message ||
+      (Array.isArray(data?.details) && data.details[0]) ||
+      (Array.isArray(data?.errors) && data.errors[0]) ||
+      "";
 
-    if (typeof data === "string") return data;
-
-    if (typeof data.error === "string" && data.error.trim()) return data.error;
-    if (typeof data.message === "string" && data.message.trim()) return data.message;
-
-    if (Array.isArray(data.errors) && data.errors.length > 0) {
-      const firstError = data.errors[0];
-      if (typeof firstError === "string") return firstError;
-      if (typeof firstError?.message === "string") return firstError.message;
+    if (raw === "invalid_credentials" || response?.status === 401) {
+      return "Incorrect email or password.";
     }
 
-    if (typeof data.status === "string" && data.status.trim()) return data.status;
+    if (raw === "validation_error") {
+      if (Array.isArray(data?.details) && data.details.length > 0) {
+        return data.details[0];
+      }
+      return "Please check your information and try again.";
+    }
+
+    if (raw === "bad_request" || response?.status === 400) {
+      return "The sign-in request could not be processed.";
+    }
+
+    if (raw === "missing_token") {
+      return "Your session token was missing. Please try again.";
+    }
+
+    if (raw === "invalid_token") {
+      return "Your session is invalid. Please sign in again.";
+    }
+
+    if (typeof raw === "string" && raw.trim()) {
+      return raw.replaceAll("_", " ");
+    }
 
     return "Sign in failed. Please check your email and password.";
   };
@@ -37,7 +57,7 @@ export default function Login() {
 
     if (isLoading) return;
 
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
 
     if (!trimmedEmail || !trimmedPassword) {
@@ -55,8 +75,10 @@ export default function Login() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: trimmedEmail,
-          password: trimmedPassword,
+          user: {
+            email: trimmedEmail,
+            password: trimmedPassword,
+          },
         }),
       });
 
@@ -68,7 +90,7 @@ export default function Login() {
       }
 
       if (!response.ok) {
-        throw new Error(extractErrorMessage(data));
+        throw new Error(extractErrorMessage(data, response));
       }
 
       if (!data?.token) {
@@ -251,7 +273,8 @@ export default function Login() {
                   style={{
                     position: "absolute",
                     inset: 0,
-                    background: "rgba(8,17,32,0.18)",
+                    borderRadius: "16px",
+                    overflow: "hidden",
                   }}
                 >
                   <span
@@ -259,9 +282,9 @@ export default function Login() {
                       position: "absolute",
                       inset: 0,
                       transformOrigin: "left center",
-                      animation: "portalButtonFill 0.65s ease-out forwards",
                       background:
                         "linear-gradient(135deg, #22d3ee 0%, #818cf8 50%, #f472b6 100%)",
+                      animation: "portalButtonFill 0.45s ease-out forwards",
                     }}
                   />
                 </span>
