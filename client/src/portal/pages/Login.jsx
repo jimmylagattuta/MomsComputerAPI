@@ -13,14 +13,34 @@ export default function Login() {
     return email.trim() && password.trim() && !isLoading;
   }, [email, password, isLoading]);
 
+  const extractErrorMessage = (data) => {
+    if (!data) return "Sign in failed. Please try again.";
+
+    if (typeof data === "string") return data;
+
+    if (typeof data.error === "string" && data.error.trim()) return data.error;
+    if (typeof data.message === "string" && data.message.trim()) return data.message;
+
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      const firstError = data.errors[0];
+      if (typeof firstError === "string") return firstError;
+      if (typeof firstError?.message === "string") return firstError.message;
+    }
+
+    if (typeof data.status === "string" && data.status.trim()) return data.status;
+
+    return "Sign in failed. Please check your email and password.";
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (isLoading) return;
 
     const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
 
-    if (!trimmedEmail || !password.trim()) {
+    if (!trimmedEmail || !trimmedPassword) {
       setError("Please enter your email and password.");
       return;
     }
@@ -36,25 +56,19 @@ export default function Login() {
         },
         body: JSON.stringify({
           email: trimmedEmail,
-          password,
+          password: trimmedPassword,
         }),
       });
 
-      let data = {};
+      let data = null;
       try {
         data = await response.json();
       } catch (_jsonError) {
-        data = {};
+        data = null;
       }
 
       if (!response.ok) {
-        const errorMessage =
-          data?.error ||
-          data?.message ||
-          data?.errors?.[0] ||
-          "Sign in failed. Please check your credentials and try again.";
-
-        throw new Error(errorMessage);
+        throw new Error(extractErrorMessage(data));
       }
 
       if (!data?.token) {
@@ -237,21 +251,17 @@ export default function Login() {
                   style={{
                     position: "absolute",
                     inset: 0,
-                    overflow: "hidden",
-                    borderRadius: "16px",
+                    background: "rgba(8,17,32,0.18)",
                   }}
                 >
                   <span
                     style={{
                       position: "absolute",
-                      top: 0,
-                      left: 0,
-                      height: "100%",
-                      width: "40%",
-                      borderRadius: "16px",
+                      inset: 0,
+                      transformOrigin: "left center",
+                      animation: "portalButtonFill 0.65s ease-out forwards",
                       background:
-                        "linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.38) 45%, rgba(255,255,255,0.12) 100%)",
-                      animation: "portalButtonLoading 1s ease-in-out infinite",
+                        "linear-gradient(135deg, #22d3ee 0%, #818cf8 50%, #f472b6 100%)",
                     }}
                   />
                 </span>
@@ -276,12 +286,12 @@ export default function Login() {
 
       <style>
         {`
-          @keyframes portalButtonLoading {
+          @keyframes portalButtonFill {
             0% {
-              transform: translateX(-130%);
+              transform: scaleX(0);
             }
             100% {
-              transform: translateX(330%);
+              transform: scaleX(1);
             }
           }
         `}
