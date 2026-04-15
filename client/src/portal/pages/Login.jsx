@@ -8,7 +8,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [loadingText, setLoadingText] = useState("Signing you in...");
 
   const canSubmit = useMemo(() => {
     return email.trim() && password.trim() && !isLoading;
@@ -28,20 +27,6 @@ export default function Login() {
 
     setError("");
     setIsLoading(true);
-
-    const loadingMessages = [
-      "Signing you in...",
-      "Verifying credentials...",
-      "Preparing your portal...",
-    ];
-
-    let messageIndex = 0;
-    setLoadingText(loadingMessages[0]);
-
-    const loadingInterval = setInterval(() => {
-      messageIndex = (messageIndex + 1) % loadingMessages.length;
-      setLoadingText(loadingMessages[messageIndex]);
-    }, 900);
 
     try {
       const response = await fetch("/v1/auth/login", {
@@ -85,10 +70,7 @@ export default function Login() {
       window.location.href = "/portal/dashboard";
     } catch (err) {
       setError(err.message || "Something went wrong while signing in.");
-    } finally {
-      clearInterval(loadingInterval);
       setIsLoading(false);
-      setLoadingText("Signing you in...");
     }
   };
 
@@ -237,76 +219,69 @@ export default function Login() {
               disabled={isLoading}
             />
 
-            {error ? (
-              <div style={errorStyle}>
-                {error}
-              </div>
-            ) : null}
+            {error ? <div style={errorStyle}>{error}</div> : null}
 
             <button
               type="submit"
+              disabled={!canSubmit}
               style={{
                 ...buttonStyle,
                 opacity: canSubmit ? 1 : 0.72,
                 cursor: canSubmit ? "pointer" : "not-allowed",
-              }}
-              disabled={!canSubmit}
-            >
-              {isLoading ? "Signing In..." : "Sign In"}
-            </button>
-
-            <div
-              style={{
-                height: "10px",
-                borderRadius: "999px",
-                background: "rgba(255,255,255,0.08)",
+                position: "relative",
                 overflow: "hidden",
-                border: "1px solid rgba(255,255,255,0.08)",
-                opacity: isLoading ? 1 : 0,
-                transform: isLoading ? "translateY(0)" : "translateY(-4px)",
-                transition: "opacity 0.25s ease, transform 0.25s ease",
               }}
             >
-              <div
-                style={{
-                  height: "100%",
-                  width: "42%",
-                  borderRadius: "999px",
-                  background:
-                    "linear-gradient(135deg, #67e8f9 0%, #a78bfa 50%, #f472b6 100%)",
-                  boxShadow: "0 0 18px rgba(103,232,249,0.35)",
-                  animation: isLoading ? "portalLoadingBar 1.1s ease-in-out infinite" : "none",
-                }}
-              />
-            </div>
+              {isLoading && (
+                <span
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    overflow: "hidden",
+                    borderRadius: "16px",
+                  }}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      height: "100%",
+                      width: "40%",
+                      borderRadius: "16px",
+                      background:
+                        "linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.38) 45%, rgba(255,255,255,0.12) 100%)",
+                      animation: "portalButtonLoading 1s ease-in-out infinite",
+                    }}
+                  />
+                </span>
+              )}
 
-            <div
-              style={{
-                minHeight: "20px",
-                fontSize: "0.9rem",
-                color: "#93c5fd",
-                fontWeight: 700,
-                opacity: isLoading ? 1 : 0,
-                transition: "opacity 0.25s ease",
-              }}
-            >
-              {isLoading ? loadingText : ""}
-            </div>
+              <span
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "100%",
+                }}
+              >
+                {isLoading ? "Signing In..." : "Sign In"}
+              </span>
+            </button>
           </form>
         </div>
       </div>
 
       <style>
         {`
-          @keyframes portalLoadingBar {
+          @keyframes portalButtonLoading {
             0% {
-              transform: translateX(-115%);
-            }
-            50% {
-              transform: translateX(85%);
+              transform: translateX(-130%);
             }
             100% {
-              transform: translateX(240%);
+              transform: translateX(330%);
             }
           }
         `}
@@ -334,7 +309,6 @@ const buttonStyle = {
   padding: "15px 18px",
   fontWeight: 900,
   fontSize: "1rem",
-  cursor: "pointer",
   color: "#081120",
   background: "linear-gradient(135deg, #67e8f9 0%, #a78bfa 50%, #f472b6 100%)",
   boxShadow: "0 16px 34px rgba(103,232,249,0.20)",
