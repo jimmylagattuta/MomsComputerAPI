@@ -7,13 +7,13 @@ import Login from "./portal/pages/Login";
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-
       <Route path="/" element={<PortalLayout />}>
-        <Route index element={<Dashboard />} />
+        <Route index element={<Navigate to="/login" replace />} />
+        <Route path="login" element={<Login />} />
+        <Route path="dashboard" element={<Dashboard />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
