@@ -1,9 +1,97 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 
 const LOGO_URL =
   "https://res.cloudinary.com/djtsuktwb/image/upload/v1769703507/ChatGPT_Image_Jan_29_2026_08_00_07_AM_1_3_gtqeo8.jpg";
 
 export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [loadingText, setLoadingText] = useState("Signing you in...");
+
+  const canSubmit = useMemo(() => {
+    return email.trim() && password.trim() && !isLoading;
+  }, [email, password, isLoading]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (isLoading) return;
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password.trim()) {
+      setError("Please enter your email and password.");
+      return;
+    }
+
+    setError("");
+    setIsLoading(true);
+
+    const loadingMessages = [
+      "Signing you in...",
+      "Verifying credentials...",
+      "Preparing your portal...",
+    ];
+
+    let messageIndex = 0;
+    setLoadingText(loadingMessages[0]);
+
+    const loadingInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % loadingMessages.length;
+      setLoadingText(loadingMessages[messageIndex]);
+    }, 900);
+
+    try {
+      const response = await fetch("/v1/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          password,
+        }),
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (_jsonError) {
+        data = {};
+      }
+
+      if (!response.ok) {
+        const errorMessage =
+          data?.error ||
+          data?.message ||
+          data?.errors?.[0] ||
+          "Sign in failed. Please check your credentials and try again.";
+
+        throw new Error(errorMessage);
+      }
+
+      if (!data?.token) {
+        throw new Error("Login succeeded, but no token was returned.");
+      }
+
+      localStorage.setItem("portalToken", data.token);
+
+      if (data.user) {
+        localStorage.setItem("portalUser", JSON.stringify(data.user));
+      }
+
+      window.location.href = "/portal/dashboard";
+    } catch (err) {
+      setError(err.message || "Something went wrong while signing in.");
+    } finally {
+      clearInterval(loadingInterval);
+      setIsLoading(false);
+      setLoadingText("Signing you in...");
+    }
+  };
+
   return (
     <div
       style={{
@@ -128,12 +216,15 @@ export default function Login() {
             Sign in to access the Mom&apos;s Computer admin portal.
           </p>
 
-          <form style={{ display: "grid", gap: "14px" }}>
+          <form onSubmit={handleSubmit} style={{ display: "grid", gap: "14px" }}>
             <input
               type="email"
               placeholder="Email"
               style={inputStyle}
               autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isLoading}
             />
 
             <input
@@ -141,14 +232,85 @@ export default function Login() {
               placeholder="Password"
               style={inputStyle}
               autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoading}
             />
 
-            <button type="submit" style={buttonStyle}>
-              Sign In
+            {error ? (
+              <div style={errorStyle}>
+                {error}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              style={{
+                ...buttonStyle,
+                opacity: canSubmit ? 1 : 0.72,
+                cursor: canSubmit ? "pointer" : "not-allowed",
+              }}
+              disabled={!canSubmit}
+            >
+              {isLoading ? "Signing In..." : "Sign In"}
             </button>
+
+            <div
+              style={{
+                height: "10px",
+                borderRadius: "999px",
+                background: "rgba(255,255,255,0.08)",
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.08)",
+                opacity: isLoading ? 1 : 0,
+                transform: isLoading ? "translateY(0)" : "translateY(-4px)",
+                transition: "opacity 0.25s ease, transform 0.25s ease",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: "42%",
+                  borderRadius: "999px",
+                  background:
+                    "linear-gradient(135deg, #67e8f9 0%, #a78bfa 50%, #f472b6 100%)",
+                  boxShadow: "0 0 18px rgba(103,232,249,0.35)",
+                  animation: isLoading ? "portalLoadingBar 1.1s ease-in-out infinite" : "none",
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                minHeight: "20px",
+                fontSize: "0.9rem",
+                color: "#93c5fd",
+                fontWeight: 700,
+                opacity: isLoading ? 1 : 0,
+                transition: "opacity 0.25s ease",
+              }}
+            >
+              {isLoading ? loadingText : ""}
+            </div>
           </form>
         </div>
       </div>
+
+      <style>
+        {`
+          @keyframes portalLoadingBar {
+            0% {
+              transform: translateX(-115%);
+            }
+            50% {
+              transform: translateX(85%);
+            }
+            100% {
+              transform: translateX(240%);
+            }
+          }
+        `}
+      </style>
     </div>
   );
 }
@@ -176,4 +338,17 @@ const buttonStyle = {
   color: "#081120",
   background: "linear-gradient(135deg, #67e8f9 0%, #a78bfa 50%, #f472b6 100%)",
   boxShadow: "0 16px 34px rgba(103,232,249,0.20)",
+};
+
+const errorStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  textAlign: "left",
+  padding: "12px 14px",
+  borderRadius: "14px",
+  background: "rgba(239,68,68,0.14)",
+  border: "1px solid rgba(248,113,113,0.35)",
+  color: "#fecaca",
+  fontSize: "0.92rem",
+  fontWeight: 700,
 };
