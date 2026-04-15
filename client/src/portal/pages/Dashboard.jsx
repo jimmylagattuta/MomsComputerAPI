@@ -11,7 +11,15 @@ const cardStyle = {
   backdropFilter: "blur(14px)",
 };
 
-const pillStyle = {
+const statCardStyle = {
+  ...cardStyle,
+  minHeight: 150,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+};
+
+const labelStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 8,
@@ -19,16 +27,19 @@ const pillStyle = {
   borderRadius: 999,
   background: "rgba(255,255,255,0.06)",
   border: "1px solid rgba(255,255,255,0.09)",
-  fontSize: "0.85rem",
+  fontSize: "0.82rem",
   fontWeight: 700,
   color: "#dbeafe",
+  width: "fit-content",
 };
 
-const statCard = (accent) => ({
-  ...cardStyle,
-  minHeight: 180,
-  background: `linear-gradient(180deg, rgba(15,23,42,0.88) 0%, rgba(15,23,42,0.78) 100%), ${accent}`,
-});
+const sectionTitleStyle = {
+  margin: 0,
+  fontSize: "1.15rem",
+  fontWeight: 800,
+  letterSpacing: "-0.02em",
+  color: "#ffffff",
+};
 
 export default function Dashboard() {
   return (
@@ -36,156 +47,338 @@ export default function Dashboard() {
       <section
         style={{
           ...cardStyle,
-          padding: "34px 28px",
-          background:
-            "radial-gradient(circle at top right, rgba(168,85,247,0.18), transparent 28%), radial-gradient(circle at top left, rgba(34,211,238,0.18), transparent 25%), rgba(15,23,42,0.82)",
+          padding: "28px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 18,
+          flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "grid", gap: 18 }}>
-          <div style={pillStyle}>⚡ Live Admin Surface</div>
+        <div>
+          <div style={{ ...labelStyle, marginBottom: 14 }}>Admin Portal</div>
 
+          <h1
+            style={{
+              margin: 0,
+              fontSize: "clamp(1.9rem, 3vw, 2.8rem)",
+              fontWeight: 900,
+              letterSpacing: "-0.04em",
+              lineHeight: 1.05,
+              color: "#ffffff",
+            }}
+          >
+            Mom&apos;s Computer Dashboard
+          </h1>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              color: "#cbd5e1",
+              fontSize: "1rem",
+              lineHeight: 1.7,
+              maxWidth: 700,
+            }}
+          >
+            A clean admin view for users, subscriptions, support, and recent activity.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <button style={secondaryButtonStyle}>Search</button>
+          <button style={primaryButtonStyle}>Add User</button>
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 18,
+        }}
+      >
+        <StatCard
+          title="Users"
+          value="--"
+          subtext="Total registered users"
+          glow="rgba(34,211,238,0.18)"
+        />
+        <StatCard
+          title="Subscriptions"
+          value="--"
+          subtext="Active billing accounts"
+          glow="rgba(168,85,247,0.18)"
+        />
+        <StatCard
+          title="Revenue"
+          value="--"
+          subtext="Monthly recurring revenue"
+          glow="rgba(244,114,182,0.18)"
+        />
+        <StatCard
+          title="Support"
+          value="--"
+          subtext="Open support conversations"
+          glow="rgba(250,204,21,0.16)"
+        />
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.7fr) minmax(320px, 1fr)",
+          gap: 20,
+        }}
+      >
+        <div style={cardStyle}>
+          <Glow color="rgba(34,211,238,0.12)" />
           <div
             style={{
-              display: "grid",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
               gap: 14,
-              gridTemplateColumns: "minmax(0, 1.5fr) minmax(260px, 0.9fr)",
+              flexWrap: "wrap",
+              marginBottom: 18,
             }}
           >
             <div>
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: "clamp(2rem, 4vw, 3.4rem)",
-                  lineHeight: 1.03,
-                  letterSpacing: "-0.04em",
-                  fontWeight: 900,
-                }}
-              >
-                Futuristic control for users, money, support, and ops.
-              </h2>
-
-              <p
-                style={{
-                  margin: "16px 0 0",
-                  fontSize: "1.05rem",
-                  lineHeight: 1.7,
-                  color: "#cbd5e1",
-                  maxWidth: 760,
-                }}
-              >
-                Your portal is officially live. Next we can wire in auth, role
-                protection, financial metrics, user activity, support threads,
-                subscriptions, and a much more advanced AI-styled dashboard.
-              </p>
+              <h2 style={sectionTitleStyle}>Users</h2>
+              <p style={sectionSubtextStyle}>Recent accounts and quick actions</p>
             </div>
 
-            <div
-              style={{
-                borderRadius: 24,
-                padding: 20,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                display: "grid",
-                gap: 12,
-                alignContent: "start",
-              }}
-            >
-              <div style={{ ...pillStyle, width: "fit-content" }}>🤖 System Status</div>
+            <button style={smallButtonStyle}>View All</button>
+          </div>
 
-              <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
-                <StatusRow label="Portal Route" value="Online" color="#22c55e" />
-                <StatusRow label="React Build" value="Deployed" color="#38bdf8" />
-                <StatusRow label="Rails Backend" value="Connected" color="#a78bfa" />
-                <StatusRow label="Admin Surface" value="Scaffolded" color="#f472b6" />
-              </div>
-            </div>
+          <div style={{ display: "grid", gap: 12 }}>
+            <UserRow
+              initials="JL"
+              name="James Lagattuta"
+              email="jimmy.lagattuta@gmail.com"
+              role="Admin"
+              status="Active"
+            />
+            <UserRow
+              initials="JD"
+              name="John Doe"
+              email="example@mom.com"
+              role="Senior"
+              status="Active"
+            />
+            <UserRow
+              initials="TR"
+              name="Ted Rowlend"
+              email="ted@mail.com"
+              role="Senior"
+              status="Inactive"
+            />
           </div>
         </div>
-      </section>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 20,
-        }}
-      >
-        <div style={statCard("radial-gradient(circle at top right, rgba(34,211,238,0.22), transparent 40%)")}>
-          <MiniGlow color="rgba(34,211,238,0.18)" />
-          <div style={pillStyle}>👤 Users</div>
-          <div style={{ marginTop: 24, fontSize: "2.6rem", fontWeight: 900 }}>--</div>
-          <div style={{ marginTop: 8, color: "#cbd5e1" }}>Registered users coming next</div>
-        </div>
+        <div style={{ display: "grid", gap: 20 }}>
+          <div style={cardStyle}>
+            <Glow color="rgba(168,85,247,0.12)" />
+            <h2 style={sectionTitleStyle}>Support Threads</h2>
+            <p style={sectionSubtextStyle}>Recent conversations needing attention</p>
 
-        <div style={statCard("radial-gradient(circle at top right, rgba(168,85,247,0.22), transparent 40%)")}>
-          <MiniGlow color="rgba(168,85,247,0.18)" />
-          <div style={pillStyle}>💸 Revenue</div>
-          <div style={{ marginTop: 24, fontSize: "2.6rem", fontWeight: 900 }}>--</div>
-          <div style={{ marginTop: 8, color: "#cbd5e1" }}>Financial metrics panel ready to wire</div>
-        </div>
+            <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
+              <MiniItem
+                title="Billing question"
+                meta="2 unread messages"
+                badge="Open"
+              />
+              <MiniItem
+                title="Password reset help"
+                meta="Waiting on reply"
+                badge="Pending"
+              />
+              <MiniItem
+                title="Tech support request"
+                meta="Assigned to admin"
+                badge="Open"
+              />
+            </div>
+          </div>
 
-        <div style={statCard("radial-gradient(circle at top right, rgba(244,114,182,0.22), transparent 40%)")}>
-          <MiniGlow color="rgba(244,114,182,0.18)" />
-          <div style={pillStyle}>🛟 Support</div>
-          <div style={{ marginTop: 24, fontSize: "2.6rem", fontWeight: 900 }}>--</div>
-          <div style={{ marginTop: 8, color: "#cbd5e1" }}>Live support thread dashboard next</div>
-        </div>
+          <div style={cardStyle}>
+            <Glow color="rgba(244,114,182,0.12)" />
+            <h2 style={sectionTitleStyle}>Recent Activity</h2>
+            <p style={sectionSubtextStyle}>Latest portal and account events</p>
 
-        <div style={statCard("radial-gradient(circle at top right, rgba(250,204,21,0.18), transparent 40%)")}>
-          <MiniGlow color="rgba(250,204,21,0.14)" />
-          <div style={pillStyle}>🧠 AI Ops</div>
-          <div style={{ marginTop: 24, fontSize: "2.6rem", fontWeight: 900 }}>ACTIVE</div>
-          <div style={{ marginTop: 8, color: "#cbd5e1" }}>Futuristic dashboard theme online</div>
-        </div>
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-          gap: 20,
-        }}
-      >
-        <div style={cardStyle}>
-          <MiniGlow color="rgba(34,211,238,0.14)" />
-          <div style={pillStyle}>🚀 Next Build Targets</div>
-          <ul
-            style={{
-              margin: "18px 0 0",
-              paddingLeft: 18,
-              color: "#e2e8f0",
-              lineHeight: 1.9,
-            }}
-          >
-            <li>Admin auth with JWT login</li>
-            <li>Protected routes for portal-only access</li>
-            <li>Dashboard metrics from `/v1/admin/dashboard`</li>
-            <li>Users table and support thread inbox</li>
-            <li>Revenue, subscriptions, and tax-friendly summaries</li>
-          </ul>
-        </div>
-
-        <div style={cardStyle}>
-          <MiniGlow color="rgba(168,85,247,0.14)" />
-          <div style={pillStyle}>🛠 Visual Direction</div>
-          <p
-            style={{
-              margin: "18px 0 0",
-              color: "#cbd5e1",
-              lineHeight: 1.8,
-            }}
-          >
-            This version gives you a neon AI command-center feel with a colorful
-            robot header, glowing cards, glassy panels, gradient lighting, and a
-            more premium admin presence without adding any libraries yet.
-          </p>
+            <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
+              <ActivityItem text="New user signed up" time="Today" />
+              <ActivityItem text="Support thread updated" time="Today" />
+              <ActivityItem text="Subscription changed" time="Yesterday" />
+              <ActivityItem text="Admin login detected" time="Yesterday" />
+            </div>
+          </div>
         </div>
       </section>
     </div>
   );
 }
 
-function StatusRow({ label, value, color }) {
+function StatCard({ title, value, subtext, glow }) {
+  return (
+    <div style={statCardStyle}>
+      <Glow color={glow} />
+
+      <div>
+        <div style={labelStyle}>{title}</div>
+        <div
+          style={{
+            marginTop: 20,
+            fontSize: "2.3rem",
+            fontWeight: 900,
+            letterSpacing: "-0.04em",
+            color: "#ffffff",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          color: "#cbd5e1",
+          fontSize: "0.95rem",
+        }}
+      >
+        {subtext}
+      </div>
+    </div>
+  );
+}
+
+function UserRow({ initials, name, email, role, status }) {
+  const isActive = status === "Active";
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto 1fr auto auto",
+        gap: 14,
+        alignItems: "center",
+        padding: "14px 16px",
+        borderRadius: 18,
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          display: "grid",
+          placeItems: "center",
+          fontWeight: 900,
+          color: "#081120",
+          background: "linear-gradient(135deg, #67e8f9 0%, #a78bfa 100%)",
+        }}
+      >
+        {initials}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontWeight: 800,
+            color: "#ffffff",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {name}
+        </div>
+        <div
+          style={{
+            color: "#94a3b8",
+            fontSize: "0.92rem",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            marginTop: 2,
+          }}
+        >
+          {email}
+        </div>
+      </div>
+
+      <span
+        style={{
+          padding: "7px 12px",
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          color: "#dbeafe",
+          fontSize: "0.8rem",
+          fontWeight: 700,
+        }}
+      >
+        {role}
+      </span>
+
+      <span
+        style={{
+          padding: "7px 12px",
+          borderRadius: 999,
+          background: isActive ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.14)",
+          border: isActive
+            ? "1px solid rgba(34,197,94,0.28)"
+            : "1px solid rgba(239,68,68,0.28)",
+          color: isActive ? "#86efac" : "#fca5a5",
+          fontSize: "0.8rem",
+          fontWeight: 800,
+        }}
+      >
+        {status}
+      </span>
+    </div>
+  );
+}
+
+function MiniItem({ title, meta, badge }) {
+  return (
+    <div
+      style={{
+        padding: "14px 16px",
+        borderRadius: 18,
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <div>
+        <div style={{ color: "#ffffff", fontWeight: 800 }}>{title}</div>
+        <div style={{ color: "#94a3b8", fontSize: "0.9rem", marginTop: 3 }}>{meta}</div>
+      </div>
+
+      <span
+        style={{
+          padding: "7px 12px",
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          color: "#dbeafe",
+          fontSize: "0.78rem",
+          fontWeight: 800,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {badge}
+      </span>
+    </div>
+  );
+}
+
+function ActivityItem({ text, time }) {
   return (
     <div
       style={{
@@ -193,39 +386,19 @@ function StatusRow({ label, value, color }) {
         justifyContent: "space-between",
         alignItems: "center",
         gap: 12,
-        padding: "12px 14px",
-        borderRadius: 16,
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.06)",
+        padding: "12px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
       }}
     >
-      <span style={{ color: "#cbd5e1", fontWeight: 600 }}>{label}</span>
-
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          fontWeight: 800,
-          color: "#ffffff",
-        }}
-      >
-        <span
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            background: color,
-            boxShadow: `0 0 14px ${color}`,
-          }}
-        />
-        {value}
+      <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{text}</span>
+      <span style={{ color: "#94a3b8", fontSize: "0.88rem", whiteSpace: "nowrap" }}>
+        {time}
       </span>
     </div>
   );
 }
 
-function MiniGlow({ color }) {
+function Glow({ color }) {
   return (
     <div
       style={{
@@ -242,3 +415,43 @@ function MiniGlow({ color }) {
     />
   );
 }
+
+const sectionSubtextStyle = {
+  margin: "6px 0 0",
+  color: "#94a3b8",
+  fontSize: "0.95rem",
+};
+
+const primaryButtonStyle = {
+  border: "none",
+  borderRadius: 14,
+  padding: "12px 18px",
+  fontWeight: 900,
+  fontSize: "0.95rem",
+  cursor: "pointer",
+  color: "#081120",
+  background: "linear-gradient(135deg, #67e8f9 0%, #a78bfa 50%, #f472b6 100%)",
+  boxShadow: "0 16px 34px rgba(103,232,249,0.20)",
+};
+
+const secondaryButtonStyle = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  borderRadius: 14,
+  padding: "12px 18px",
+  fontWeight: 800,
+  fontSize: "0.95rem",
+  cursor: "pointer",
+  color: "#e2e8f0",
+  background: "rgba(255,255,255,0.05)",
+};
+
+const smallButtonStyle = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  borderRadius: 12,
+  padding: "10px 14px",
+  fontWeight: 800,
+  fontSize: "0.88rem",
+  cursor: "pointer",
+  color: "#e2e8f0",
+  background: "rgba(255,255,255,0.05)",
+};
