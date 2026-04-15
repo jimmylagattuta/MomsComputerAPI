@@ -1,4 +1,55 @@
-import React from "react";
+import React, { useMemo, useRef, useState } from "react";
+
+const LOGO_URL =
+  "https://res.cloudinary.com/djtsuktwb/image/upload/v1769703507/ChatGPT_Image_Jan_29_2026_08_00_07_AM_1_3_gtqeo8.jpg";
+
+const sampleUsers = [
+  {
+    id: 1,
+    initials: "JL",
+    name: "James Lagattuta",
+    email: "jimmy.lagattuta@gmail.com",
+    role: "Admin",
+    status: "Active",
+    createdAt: "Apr 2026",
+  },
+  {
+    id: 2,
+    initials: "JD",
+    name: "John Doe",
+    email: "example@mom.com",
+    role: "Senior",
+    status: "Active",
+    createdAt: "Apr 2026",
+  },
+  {
+    id: 3,
+    initials: "TR",
+    name: "Ted Rowlend",
+    email: "ted@mail.com",
+    role: "Senior",
+    status: "Inactive",
+    createdAt: "Mar 2026",
+  },
+  {
+    id: 4,
+    initials: "BD",
+    name: "Bob Doe",
+    email: "me@mail.com",
+    role: "Senior",
+    status: "Active",
+    createdAt: "Mar 2026",
+  },
+  {
+    id: 5,
+    initials: "MC",
+    name: "Mom Support",
+    email: "support@momscomputer.com",
+    role: "Admin",
+    status: "Active",
+    createdAt: "Apr 2026",
+  },
+];
 
 const cardStyle = {
   position: "relative",
@@ -42,6 +93,28 @@ const sectionTitleStyle = {
 };
 
 export default function Dashboard() {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const usersRef = useRef(null);
+
+  const filteredUsers = useMemo(() => {
+    return sampleUsers.filter((user) => {
+      const matchesSearch =
+        user.name.toLowerCase().includes(search.toLowerCase()) ||
+        user.email.toLowerCase().includes(search.toLowerCase()) ||
+        user.role.toLowerCase().includes(search.toLowerCase());
+
+      const matchesStatus =
+        statusFilter === "All" ? true : user.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [search, statusFilter]);
+
+  const scrollToUsers = () => {
+    usersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div style={{ display: "grid", gap: 24 }}>
       <section
@@ -55,39 +128,76 @@ export default function Dashboard() {
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <div style={{ ...labelStyle, marginBottom: 14 }}>Admin Portal</div>
-
-          <h1
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 18,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
             style={{
-              margin: 0,
-              fontSize: "clamp(1.9rem, 3vw, 2.8rem)",
-              fontWeight: 900,
-              letterSpacing: "-0.04em",
-              lineHeight: 1.05,
-              color: "#ffffff",
+              width: 70,
+              height: 70,
+              borderRadius: 20,
+              padding: 8,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.28)",
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
             }}
           >
-            Mom&apos;s Computer Dashboard
-          </h1>
+            <img
+              src={LOGO_URL}
+              alt="Mom's Computer logo"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                borderRadius: 14,
+                display: "block",
+              }}
+            />
+          </div>
 
-          <p
-            style={{
-              margin: "10px 0 0",
-              color: "#cbd5e1",
-              fontSize: "1rem",
-              lineHeight: 1.7,
-              maxWidth: 700,
-            }}
-          >
-            A clean admin view for users, subscriptions, support, and recent activity.
-          </p>
+          <div>
+            <div style={{ ...labelStyle, marginBottom: 14 }}>Admin Portal</div>
+
+            <h1
+              style={{
+                margin: 0,
+                fontSize: "clamp(1.9rem, 3vw, 2.8rem)",
+                fontWeight: 900,
+                letterSpacing: "-0.04em",
+                lineHeight: 1.05,
+                color: "#ffffff",
+              }}
+            >
+              Mom&apos;s Computer AI App
+              <br />
+              Dashboard
+            </h1>
+
+            <p
+              style={{
+                margin: "10px 0 0",
+                color: "#cbd5e1",
+                fontSize: "1rem",
+                lineHeight: 1.7,
+                maxWidth: 700,
+              }}
+            >
+              Revenue, subscriptions, users, and account health in one clean admin view.
+            </p>
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <button style={secondaryButtonStyle}>Search</button>
-          <button style={primaryButtonStyle}>Add User</button>
-        </div>
+        <button style={primaryButtonStyle} onClick={scrollToUsers}>
+          View Users
+        </button>
       </section>
 
       <section
@@ -98,120 +208,118 @@ export default function Dashboard() {
         }}
       >
         <StatCard
-          title="Users"
+          title="MRR"
           value="--"
-          subtext="Total registered users"
+          subtext="Monthly recurring revenue"
           glow="rgba(34,211,238,0.18)"
         />
         <StatCard
           title="Subscriptions"
           value="--"
-          subtext="Active billing accounts"
+          subtext="Currently active subscriptions"
           glow="rgba(168,85,247,0.18)"
         />
         <StatCard
-          title="Revenue"
-          value="--"
-          subtext="Monthly recurring revenue"
+          title="Users"
+          value={String(sampleUsers.length)}
+          subtext="Total registered users"
           glow="rgba(244,114,182,0.18)"
         />
         <StatCard
-          title="Support"
+          title="Past Due"
           value="--"
-          subtext="Open support conversations"
+          subtext="Accounts needing attention"
           glow="rgba(250,204,21,0.16)"
         />
       </section>
 
       <section
         style={{
+          ...cardStyle,
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.7fr) minmax(320px, 1fr)",
-          gap: 20,
+          gap: 16,
         }}
       >
-        <div style={cardStyle}>
-          <Glow color="rgba(34,211,238,0.12)" />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 14,
-              flexWrap: "wrap",
-              marginBottom: 18,
-            }}
+        <div>
+          <h2 style={sectionTitleStyle}>Filters</h2>
+          <p style={sectionSubtextStyle}>Search and narrow the users list</p>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.4fr) minmax(180px, 220px)",
+            gap: 14,
+          }}
+        >
+          <input
+            type="text"
+            placeholder="Search by name, email, or role..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={inputStyle}
+          />
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={inputStyle}
           >
-            <div>
-              <h2 style={sectionTitleStyle}>Users</h2>
-              <p style={sectionSubtextStyle}>Recent accounts and quick actions</p>
-            </div>
+            <option value="All">All Statuses</option>
+            <option value="Active">Active Only</option>
+            <option value="Inactive">Inactive Only</option>
+          </select>
+        </div>
+      </section>
 
-            <button style={smallButtonStyle}>View All</button>
-          </div>
+      <section ref={usersRef} style={cardStyle}>
+        <Glow color="rgba(34,211,238,0.12)" />
 
-          <div style={{ display: "grid", gap: 12 }}>
-            <UserRow
-              initials="JL"
-              name="James Lagattuta"
-              email="jimmy.lagattuta@gmail.com"
-              role="Admin"
-              status="Active"
-            />
-            <UserRow
-              initials="JD"
-              name="John Doe"
-              email="example@mom.com"
-              role="Senior"
-              status="Active"
-            />
-            <UserRow
-              initials="TR"
-              name="Ted Rowlend"
-              email="ted@mail.com"
-              role="Senior"
-              status="Inactive"
-            />
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 14,
+            flexWrap: "wrap",
+            marginBottom: 18,
+          }}
+        >
+          <div>
+            <h2 style={sectionTitleStyle}>Users</h2>
+            <p style={sectionSubtextStyle}>
+              Showing {filteredUsers.length} of {sampleUsers.length} users
+            </p>
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: 20 }}>
-          <div style={cardStyle}>
-            <Glow color="rgba(168,85,247,0.12)" />
-            <h2 style={sectionTitleStyle}>Support Threads</h2>
-            <p style={sectionSubtextStyle}>Recent conversations needing attention</p>
-
-            <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
-              <MiniItem
-                title="Billing question"
-                meta="2 unread messages"
-                badge="Open"
+        <div style={{ display: "grid", gap: 12 }}>
+          {filteredUsers.length > 0 ? (
+            filteredUsers.map((user) => (
+              <UserRow
+                key={user.id}
+                initials={user.initials}
+                name={user.name}
+                email={user.email}
+                role={user.role}
+                status={user.status}
+                createdAt={user.createdAt}
               />
-              <MiniItem
-                title="Password reset help"
-                meta="Waiting on reply"
-                badge="Pending"
-              />
-              <MiniItem
-                title="Tech support request"
-                meta="Assigned to admin"
-                badge="Open"
-              />
+            ))
+          ) : (
+            <div
+              style={{
+                padding: "28px 20px",
+                borderRadius: 18,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                color: "#cbd5e1",
+                fontWeight: 700,
+              }}
+            >
+              No users match your current filters.
             </div>
-          </div>
-
-          <div style={cardStyle}>
-            <Glow color="rgba(244,114,182,0.12)" />
-            <h2 style={sectionTitleStyle}>Recent Activity</h2>
-            <p style={sectionSubtextStyle}>Latest portal and account events</p>
-
-            <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
-              <ActivityItem text="New user signed up" time="Today" />
-              <ActivityItem text="Support thread updated" time="Today" />
-              <ActivityItem text="Subscription changed" time="Yesterday" />
-              <ActivityItem text="Admin login detected" time="Yesterday" />
-            </div>
-          </div>
+          )}
         </div>
       </section>
     </div>
@@ -251,7 +359,7 @@ function StatCard({ title, value, subtext, glow }) {
   );
 }
 
-function UserRow({ initials, name, email, role, status }) {
+function UserRow({ initials, name, email, role, status, createdAt }) {
   const isActive = status === "Active";
 
   return (
@@ -308,19 +416,31 @@ function UserRow({ initials, name, email, role, status }) {
         </div>
       </div>
 
-      <span
-        style={{
-          padding: "7px 12px",
-          borderRadius: 999,
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          color: "#dbeafe",
-          fontSize: "0.8rem",
-          fontWeight: 700,
-        }}
-      >
-        {role}
-      </span>
+      <div style={{ textAlign: "right" }}>
+        <div
+          style={{
+            padding: "7px 12px",
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#dbeafe",
+            fontSize: "0.8rem",
+            fontWeight: 700,
+            display: "inline-block",
+          }}
+        >
+          {role}
+        </div>
+        <div
+          style={{
+            color: "#94a3b8",
+            fontSize: "0.82rem",
+            marginTop: 6,
+          }}
+        >
+          {createdAt}
+        </div>
+      </div>
 
       <span
         style={{
@@ -336,63 +456,6 @@ function UserRow({ initials, name, email, role, status }) {
         }}
       >
         {status}
-      </span>
-    </div>
-  );
-}
-
-function MiniItem({ title, meta, badge }) {
-  return (
-    <div
-      style={{
-        padding: "14px 16px",
-        borderRadius: 18,
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-      }}
-    >
-      <div>
-        <div style={{ color: "#ffffff", fontWeight: 800 }}>{title}</div>
-        <div style={{ color: "#94a3b8", fontSize: "0.9rem", marginTop: 3 }}>{meta}</div>
-      </div>
-
-      <span
-        style={{
-          padding: "7px 12px",
-          borderRadius: 999,
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          color: "#dbeafe",
-          fontSize: "0.78rem",
-          fontWeight: 800,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {badge}
-      </span>
-    </div>
-  );
-}
-
-function ActivityItem({ text, time }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-        padding: "12px 0",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-      }}
-    >
-      <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{text}</span>
-      <span style={{ color: "#94a3b8", fontSize: "0.88rem", whiteSpace: "nowrap" }}>
-        {time}
       </span>
     </div>
   );
@@ -434,24 +497,14 @@ const primaryButtonStyle = {
   boxShadow: "0 16px 34px rgba(103,232,249,0.20)",
 };
 
-const secondaryButtonStyle = {
-  border: "1px solid rgba(255,255,255,0.10)",
-  borderRadius: 14,
-  padding: "12px 18px",
-  fontWeight: 800,
-  fontSize: "0.95rem",
-  cursor: "pointer",
-  color: "#e2e8f0",
+const inputStyle = {
+  width: "100%",
+  padding: "14px 16px",
+  borderRadius: "16px",
+  border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.05)",
-};
-
-const smallButtonStyle = {
-  border: "1px solid rgba(255,255,255,0.10)",
-  borderRadius: 12,
-  padding: "10px 14px",
-  fontWeight: 800,
-  fontSize: "0.88rem",
-  cursor: "pointer",
-  color: "#e2e8f0",
-  background: "rgba(255,255,255,0.05)",
+  color: "#ffffff",
+  outline: "none",
+  fontSize: "0.96rem",
+  boxSizing: "border-box",
 };
