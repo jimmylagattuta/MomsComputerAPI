@@ -6,8 +6,8 @@
   },
   "scripts": {
     "clean": "rm -rf public/portal",
-    "build": "npm install --prefix app/client && npm run build --prefix app/client",
-    "deploy": "mkdir -p public/portal && cp -a app/client/build/. public/portal/",
+    "build": "npm install --prefix client && npm run build --prefix client",
+    "deploy": "mkdir -p public/portal && cp -a client/build/. public/portal/",
     "heroku-postbuild": "npm run clean && npm run build && npm run deploy"
   }
 }
