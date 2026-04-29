@@ -16,6 +16,10 @@ export default function PortalHeader({ activePanel, onSelectPanel, onLogout }) {
         alignItems: "center",
         gap: 18,
         flexWrap: "wrap",
+
+        // IMPORTANT: lets the dropdown escape the card
+        overflow: "visible",
+        zIndex: 1000,
       }}
     >
       <div

@@ -7,6 +7,7 @@ import UsersPanel from "../components/UsersPanel";
 import EmbeddedUserDetail from "../components/EmbeddedUserDetail";
 import BillingDebugPanel from "../components/BillingDebugPanel";
 import TransactionsPanel from "../components/TransactionsPanel";
+import SimplePortalPanel from "../components/SimplePortalPanel";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ export default function Dashboard() {
   const [kpisError, setKpisError] = useState("");
 
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [activePanel, setActivePanel] = useState("users");
+  const [activePanel, setActivePanel] = useState("overview");
 
   useEffect(() => {
     const token = localStorage.getItem("portalToken");
@@ -208,6 +209,14 @@ export default function Dashboard() {
         displaySubscribers={displaySubscribers}
       />
 
+      {activePanel === "overview" ? (
+        <SimplePortalPanel
+          title="Overview"
+          subtitle="High-level portal summary."
+          body="The KPI cards above are the main overview for revenue, users, subscriptions, and billing issues. This is the clean landing view for the client or tax attorney before drilling into users, transactions, subscribers, or RevenueCat events."
+        />
+      ) : null}
+
       {activePanel === "users" && selectedUserId ? (
         <EmbeddedUserDetail
           userId={selectedUserId}
@@ -225,6 +234,22 @@ export default function Dashboard() {
       ) : null}
 
       {activePanel === "transactions" ? <TransactionsPanel /> : null}
+
+      {activePanel === "subscribers" ? (
+        <SimplePortalPanel
+          title="Subscribers"
+          subtitle="Subscription status table coming next."
+          body="This section is reserved for the subscriber table. It should eventually read from /v1/admin/billing/subscribers and show active, cancelled, expired, billing issue, trial, product, platform, and renewal data."
+        />
+      ) : null}
+
+      {activePanel === "events" ? (
+        <SimplePortalPanel
+          title="Recent Events"
+          subtitle="RevenueCat webhook audit trail coming next."
+          body="This section is reserved for RevenueCat event history. It should eventually read from /v1/admin/billing/recent_events and show INITIAL_PURCHASE, RENEWAL, CANCELLATION, EXPIRATION, BILLING_ISSUE, and other webhook events."
+        />
+      ) : null}
 
       {activePanel === "debug" ? (
         <BillingDebugPanel

@@ -16,14 +16,14 @@ const dropdownStyle = {
   position: "absolute",
   right: 0,
   top: "calc(100% + 10px)",
-  width: 260,
+  width: 285,
   padding: 10,
   borderRadius: 18,
-  background: "rgba(15,23,42,0.96)",
+  background: "rgba(15,23,42,0.98)",
   border: "1px solid rgba(255,255,255,0.12)",
-  boxShadow: "0 24px 70px rgba(0,0,0,0.42)",
+  boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
   backdropFilter: "blur(18px)",
-  zIndex: 20,
+  zIndex: 999999,
 };
 
 const itemStyle = {
@@ -93,13 +93,14 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
         <span>
           {emoji} {label}
         </span>
+
         {isActive ? <span>●</span> : null}
       </button>
     );
   };
 
   return (
-    <div ref={wrapperRef} style={{ position: "relative" }}>
+    <div ref={wrapperRef} style={{ position: "relative", zIndex: 999999 }}>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -111,6 +112,12 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
       {open ? (
         <div style={dropdownStyle}>
           {renderPanelButton({
+            panelName: "overview",
+            label: "Overview",
+            emoji: "📊",
+          })}
+
+          {renderPanelButton({
             panelName: "users",
             label: "Users",
             emoji: "👥",
@@ -120,6 +127,18 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
             panelName: "transactions",
             label: "Transaction Table",
             emoji: "💳",
+          })}
+
+          {renderPanelButton({
+            panelName: "subscribers",
+            label: "Subscribers",
+            emoji: "✅",
+          })}
+
+          {renderPanelButton({
+            panelName: "events",
+            label: "Recent Events",
+            emoji: "⚡",
           })}
 
           {renderPanelButton({
