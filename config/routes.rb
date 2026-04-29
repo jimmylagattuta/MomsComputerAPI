@@ -39,6 +39,11 @@ Rails.application.routes.draw do
         get :kpis,                to: "/v1/admin/billing#kpis"
         get :recent_events,       to: "/v1/admin/billing#recent_events"
         get :recent_transactions, to: "/v1/admin/billing#recent_transactions"
+
+        # Frontend-friendly alias for the transaction table dropdown item.
+        # This points to the same controller action as recent_transactions.
+        get :transactions,        to: "/v1/admin/billing#recent_transactions"
+
         get :subscribers,         to: "/v1/admin/billing#subscribers"
       end
 
