@@ -317,6 +317,16 @@ export default function Dashboard() {
     loadUsers();
   }, []);
 
+  const displayMrrCents =
+    Number(kpis?.mrr_cents || 0) > 0
+      ? kpis?.mrr_cents
+      : kpis?.revenue_this_month_cents;
+
+  const displaySubscribers =
+    Number(kpis?.active_subscribers || 0) > 0
+      ? kpis?.active_subscribers
+      : kpis?.paying_users;
+
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
       const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
@@ -457,7 +467,7 @@ export default function Dashboard() {
               ? "..."
               : kpisError
               ? "Error"
-              : formatMoneyFromCents(kpis?.mrr_cents)
+              : formatMoneyFromCents(displayMrrCents)
           }
           subtext="Monthly recurring revenue"
           glow="rgba(34,211,238,0.18)"
@@ -470,9 +480,9 @@ export default function Dashboard() {
               ? "..."
               : kpisError
               ? "Error"
-              : formatNumber(kpis?.active_subscribers)
+              : formatNumber(displaySubscribers)
           }
-          subtext="Currently active subscriptions"
+          subtext="Transaction-backed paying users"
           glow="rgba(168,85,247,0.18)"
         />
 
@@ -664,6 +674,8 @@ export default function Dashboard() {
             {
               kpisLoading,
               kpisError,
+              displayMrrCents,
+              displaySubscribers,
               kpis,
             },
             null,
