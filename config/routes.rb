@@ -36,10 +36,10 @@ Rails.application.routes.draw do
       get "dashboard", to: "dashboard#show"
 
       namespace :billing do
-        get :kpis,                to: "metrics#kpis"
-        get :recent_events,       to: "metrics#recent_events"
-        get :recent_transactions, to: "metrics#recent_transactions"
-        get :subscribers,         to: "metrics#subscribers"
+        get :kpis,                to: "/v1/admin/billing#kpis"
+        get :recent_events,       to: "/v1/admin/billing#recent_events"
+        get :recent_transactions, to: "/v1/admin/billing#recent_transactions"
+        get :subscribers,         to: "/v1/admin/billing#subscribers"
       end
 
       resources :users, only: [:index, :show, :update]
