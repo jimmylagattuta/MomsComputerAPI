@@ -22,13 +22,23 @@ class V1::Admin::BillingController < ApplicationController
 
     total_revenue_cents = transactions.sum(:price_cents)
 
-    active_subscribers = subscriptions.where(status: "active").count
-    billing_issue_subscribers = subscriptions.where(status: "billing_issue").count
-    cancelled_subscribers = subscriptions.where(status: "cancelled").count
-    expired_subscribers = subscriptions.where(status: "expired").count
-
-    paying_users = subscriptions
+    active_subscribers = subscriptions
       .where(status: "active")
+      .count
+
+    billing_issue_subscribers = subscriptions
+      .where(status: "billing_issue")
+      .count
+
+    cancelled_subscribers = subscriptions
+      .where(status: "cancelled")
+      .count
+
+    expired_subscribers = subscriptions
+      .where(status: "expired")
+      .count
+
+    paying_users = transactions
       .where.not(user_id: nil)
       .distinct
       .count(:user_id)
@@ -44,6 +54,10 @@ class V1::Admin::BillingController < ApplicationController
       .count * 9999
 
     mrr_cents = monthly_active_revenue_cents + (yearly_active_revenue_cents / 12.0)
+
+    if mrr_cents.zero? && revenue_this_month_cents.positive?
+      mrr_cents = revenue_this_month_cents
+    end
 
     revenue_by_platform = transactions
       .group(:store)
