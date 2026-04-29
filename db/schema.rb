@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_31_112241) do
+ActiveRecord::Schema[7.2].define(version: 2026_04_28_232312) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -162,6 +162,35 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_31_112241) do
     t.json "features", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "provider_product_id"
+    t.index ["provider_product_id"], name: "index_plans_on_provider_product_id", unique: true
+  end
+
+  create_table "revenuecat_events", force: :cascade do |t|
+    t.integer "user_id"
+    t.string "event_id"
+    t.string "event_type"
+    t.string "app_user_id"
+    t.string "product_id"
+    t.string "entitlement_key"
+    t.string "transaction_id"
+    t.string "original_transaction_id"
+    t.string "store"
+    t.string "environment"
+    t.integer "price_cents"
+    t.string "currency"
+    t.datetime "purchased_at"
+    t.datetime "expiration_at"
+    t.json "raw_payload", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_user_id"], name: "index_revenuecat_events_on_app_user_id"
+    t.index ["created_at"], name: "index_revenuecat_events_on_created_at"
+    t.index ["event_id"], name: "index_revenuecat_events_on_event_id", unique: true
+    t.index ["event_type"], name: "index_revenuecat_events_on_event_type"
+    t.index ["original_transaction_id"], name: "index_revenuecat_events_on_original_transaction_id"
+    t.index ["transaction_id"], name: "index_revenuecat_events_on_transaction_id"
+    t.index ["user_id"], name: "index_revenuecat_events_on_user_id"
   end
 
   create_table "revoked_tokens", force: :cascade do |t|
@@ -169,6 +198,35 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_31_112241) do
     t.datetime "expires_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "subscription_transactions", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "subscription_id"
+    t.integer "revenuecat_event_id"
+    t.string "provider"
+    t.string "event_type"
+    t.string "product_id"
+    t.string "entitlement_key"
+    t.string "transaction_id"
+    t.string "original_transaction_id"
+    t.string "store"
+    t.string "environment"
+    t.integer "price_cents"
+    t.string "currency"
+    t.datetime "purchased_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["environment"], name: "index_subscription_transactions_on_environment"
+    t.index ["original_transaction_id"], name: "index_subscription_transactions_on_original_transaction_id"
+    t.index ["product_id"], name: "index_subscription_transactions_on_product_id"
+    t.index ["purchased_at"], name: "index_subscription_transactions_on_purchased_at"
+    t.index ["revenuecat_event_id"], name: "index_subscription_transactions_on_revenuecat_event_id"
+    t.index ["store"], name: "index_subscription_transactions_on_store"
+    t.index ["subscription_id"], name: "index_subscription_transactions_on_subscription_id"
+    t.index ["transaction_id"], name: "index_subscription_transactions_on_transaction_id", unique: true
+    t.index ["user_id", "purchased_at"], name: "index_subscription_transactions_on_user_id_and_purchased_at"
+    t.index ["user_id"], name: "index_subscription_transactions_on_user_id"
   end
 
   create_table "subscriptions", force: :cascade do |t|
@@ -184,7 +242,28 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_31_112241) do
     t.text "receipt_data"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "revenuecat_app_user_id"
+    t.string "revenuecat_original_app_user_id"
+    t.string "product_id"
+    t.string "entitlement_key"
+    t.string "store"
+    t.string "environment"
+    t.string "transaction_id"
+    t.string "original_transaction_id"
+    t.integer "price_cents"
+    t.string "currency"
+    t.string "billing_period"
+    t.datetime "cancelled_at"
+    t.datetime "billing_issue_at"
+    t.datetime "expired_at"
+    t.index ["environment"], name: "index_subscriptions_on_environment"
+    t.index ["original_transaction_id"], name: "index_subscriptions_on_original_transaction_id"
     t.index ["plan_id"], name: "index_subscriptions_on_plan_id"
+    t.index ["product_id"], name: "index_subscriptions_on_product_id"
+    t.index ["revenuecat_app_user_id"], name: "index_subscriptions_on_revenuecat_app_user_id"
+    t.index ["status"], name: "index_subscriptions_on_status"
+    t.index ["store"], name: "index_subscriptions_on_store"
+    t.index ["transaction_id"], name: "index_subscriptions_on_transaction_id"
     t.index ["user_id"], name: "index_subscriptions_on_user_id"
   end
 
@@ -378,6 +457,10 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_31_112241) do
   add_foreign_key "escalation_tickets", "conversations"
   add_foreign_key "escalation_tickets", "users"
   add_foreign_key "messages", "conversations"
+  add_foreign_key "revenuecat_events", "users"
+  add_foreign_key "subscription_transactions", "revenuecat_events"
+  add_foreign_key "subscription_transactions", "subscriptions"
+  add_foreign_key "subscription_transactions", "users"
   add_foreign_key "subscriptions", "plans"
   add_foreign_key "subscriptions", "users"
   add_foreign_key "support_call_cycles", "users"

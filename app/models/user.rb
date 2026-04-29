@@ -11,6 +11,8 @@ class User < ApplicationRecord
   has_many :audit_events, dependent: :destroy
   has_many :subscriptions, dependent: :destroy
   has_many :entitlements, dependent: :destroy
+  has_many :revenuecat_events, dependent: :nullify
+  has_many :subscription_transactions, dependent: :destroy
   has_many :consent_records, dependent: :destroy
   has_many :support_call_cycles, dependent: :destroy
   has_many :support_call_sessions, dependent: :destroy

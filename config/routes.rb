@@ -9,6 +9,10 @@ Rails.application.routes.draw do
   patch "password_resets",      to: "password_resets#update"
 
   namespace :v1 do
+    namespace :revenuecat do
+      post :webhooks, to: "webhooks#create"
+    end
+
     post "devices/register", to: "devices#register"
 
     resources :support_calls, only: [:create]
@@ -51,8 +55,8 @@ Rails.application.routes.draw do
       patch :reset_password,  to: "password_resets#update"
     end
 
-    post "twilio_webhooks/voice_bridge", to: "twilio_webhooks#voice_bridge"
-    post "twilio_webhooks/call_status",  to: "twilio_webhooks#call_status"
+    post "twilio_webhooks/voice_bridge",   to: "twilio_webhooks#voice_bridge"
+    post "twilio_webhooks/call_status",    to: "twilio_webhooks#call_status"
     post "twilio_webhooks/message_status", to: "twilio_webhooks#message_status"
 
     post "ask_mom", to: "ask_mom#create"
