@@ -21,7 +21,9 @@ export default function Dashboard() {
   const [kpisError, setKpisError] = useState("");
 
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [activePanel, setActivePanel] = useState("overview");
+
+  // Main dashboard landing page is the users table again.
+  const [activePanel, setActivePanel] = useState("users");
 
   useEffect(() => {
     const token = localStorage.getItem("portalToken");
@@ -188,6 +190,13 @@ export default function Dashboard() {
 
   const handleSelectPanel = (panelName) => {
     setSelectedUserId(null);
+
+    // If someone clicks Overview, send them back to the real main dashboard.
+    if (panelName === "overview") {
+      setActivePanel("users");
+      return;
+    }
+
     setActivePanel(panelName);
   };
 
@@ -208,14 +217,6 @@ export default function Dashboard() {
         displayMrrCents={displayMrrCents}
         displaySubscribers={displaySubscribers}
       />
-
-      {activePanel === "overview" ? (
-        <SimplePortalPanel
-          title="Overview"
-          subtitle="High-level portal summary."
-          body="The KPI cards above are the main overview for revenue, users, subscriptions, and billing issues. This is the clean landing view for the client or tax attorney before drilling into users, transactions, subscribers, or RevenueCat events."
-        />
-      ) : null}
 
       {activePanel === "users" && selectedUserId ? (
         <EmbeddedUserDetail
