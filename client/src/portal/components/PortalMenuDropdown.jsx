@@ -1,4 +1,32 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
+const PANEL_OPTIONS = [
+  {
+    panelName: "users",
+    label: "Users",
+    emoji: "👥",
+  },
+  {
+    panelName: "transactions",
+    label: "Transaction Table",
+    emoji: "💳",
+  },
+  {
+    panelName: "subscribers",
+    label: "Subscribers",
+    emoji: "✅",
+  },
+  {
+    panelName: "events",
+    label: "Recent Events",
+    emoji: "⚡",
+  },
+  {
+    panelName: "debug",
+    label: "Billing Debug",
+    emoji: "🧪",
+  },
+];
 
 const menuButtonStyle = {
   padding: "12px 16px",
@@ -10,6 +38,11 @@ const menuButtonStyle = {
   fontWeight: 900,
   cursor: "pointer",
   boxShadow: "0 12px 28px rgba(0,0,0,0.20)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  minWidth: 180,
 };
 
 const dropdownStyle = {
@@ -57,6 +90,15 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
 
+  const currentPanel = useMemo(() => {
+    const normalizedActivePanel = activePanel === "overview" ? "users" : activePanel;
+
+    return (
+      PANEL_OPTIONS.find((option) => option.panelName === normalizedActivePanel) ||
+      PANEL_OPTIONS[0]
+    );
+  }, [activePanel]);
+
   useEffect(() => {
     const handleDocumentClick = (event) => {
       if (!wrapperRef.current) return;
@@ -79,7 +121,8 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
   };
 
   const renderPanelButton = ({ panelName, label, emoji }) => {
-    const isActive = activePanel === panelName;
+    const normalizedActivePanel = activePanel === "overview" ? "users" : activePanel;
+    const isActive = normalizedActivePanel === panelName;
 
     return (
       <button
@@ -106,46 +149,15 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
         onClick={() => setOpen((prev) => !prev)}
         style={menuButtonStyle}
       >
-        Portal Menu {open ? "▲" : "▼"}
+        <span>
+          {currentPanel.emoji} {currentPanel.label}
+        </span>
+        <span>{open ? "▲" : "▼"}</span>
       </button>
 
       {open ? (
         <div style={dropdownStyle}>
-          {renderPanelButton({
-            panelName: "overview",
-            label: "Overview",
-            emoji: "📊",
-          })}
-
-          {renderPanelButton({
-            panelName: "users",
-            label: "Users",
-            emoji: "👥",
-          })}
-
-          {renderPanelButton({
-            panelName: "transactions",
-            label: "Transaction Table",
-            emoji: "💳",
-          })}
-
-          {renderPanelButton({
-            panelName: "subscribers",
-            label: "Subscribers",
-            emoji: "✅",
-          })}
-
-          {renderPanelButton({
-            panelName: "events",
-            label: "Recent Events",
-            emoji: "⚡",
-          })}
-
-          {renderPanelButton({
-            panelName: "debug",
-            label: "Billing Debug",
-            emoji: "🧪",
-          })}
+          {PANEL_OPTIONS.map((option) => renderPanelButton(option))}
 
           <div
             style={{
