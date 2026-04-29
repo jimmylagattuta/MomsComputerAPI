@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const LOGO_URL =
   "https://res.cloudinary.com/djtsuktwb/image/upload/v1769703507/ChatGPT_Image_Jan_29_2026_08_00_07_AM_1_3_gtqeo8.jpg";
@@ -120,7 +121,20 @@ const backButtonStyle = {
   cursor: "pointer",
 };
 
+const logoutButtonStyle = {
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "1px solid rgba(248,113,113,0.28)",
+  background: "rgba(239,68,68,0.12)",
+  color: "#fecaca",
+  fontWeight: 900,
+  cursor: "pointer",
+  boxShadow: "0 12px 28px rgba(0,0,0,0.20)",
+};
+
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState("");
@@ -133,6 +147,55 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUserId, setSelectedUserId] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("portalToken");
+
+    if (!token) {
+      console.log("[Portal Dashboard] No portalToken found. Redirecting to login.");
+      navigate("/login", { replace: true });
+    }
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem("portalToken");
+
+    console.log("[Portal Dashboard] Logout clicked.");
+    console.log("[Portal Dashboard] portalToken exists?", Boolean(token));
+
+    try {
+      if (token) {
+        const response = await fetch("/v1/auth/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        let data = null;
+
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error("[Portal Dashboard] Logout JSON parse failed:", jsonError);
+        }
+
+        console.log("[Portal Dashboard] Logout response status:", response.status);
+        console.log("[Portal Dashboard] Logout response ok?", response.ok);
+        console.log("[Portal Dashboard] Logout raw response data:", data);
+      }
+    } catch (err) {
+      console.error("[Portal Dashboard] Logout request failed:", err);
+    } finally {
+      localStorage.removeItem("portalToken");
+      localStorage.removeItem("portalUser");
+
+      console.log("[Portal Dashboard] Portal token removed. Redirecting to login.");
+
+      navigate("/login", { replace: true });
+    }
+  };
 
   useEffect(() => {
     const loadKpis = async () => {
@@ -374,6 +437,10 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
+
+        <button type="button" onClick={handleLogout} style={logoutButtonStyle}>
+          Logout
+        </button>
       </section>
 
       <section
@@ -436,42 +503,6 @@ export default function Dashboard() {
           subtext="Accounts needing attention"
           glow="rgba(250,204,21,0.16)"
         />
-      </section>
-
-      <section style={cardStyle}>
-        <Glow color="rgba(34,211,238,0.10)" />
-
-        <div>
-          <h2 style={sectionTitleStyle}>Billing KPI Debug</h2>
-          <p style={sectionSubtextStyle}>
-            Temporary console/debug view for backend portal data.
-          </p>
-        </div>
-
-        <pre
-          style={{
-            margin: "16px 0 0",
-            padding: 16,
-            borderRadius: 16,
-            background: "rgba(0,0,0,0.28)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "#dbeafe",
-            fontSize: "0.82rem",
-            lineHeight: 1.55,
-            overflowX: "auto",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {JSON.stringify(
-            {
-              kpisLoading,
-              kpisError,
-              kpis,
-            },
-            null,
-            2
-          )}
-        </pre>
       </section>
 
       {selectedUserId ? (
@@ -604,6 +635,42 @@ export default function Dashboard() {
           </section>
         </>
       )}
+
+      <section style={cardStyle}>
+        <Glow color="rgba(34,211,238,0.10)" />
+
+        <div>
+          <h2 style={sectionTitleStyle}>Billing KPI Debug</h2>
+          <p style={sectionSubtextStyle}>
+            Temporary console/debug view for backend portal data.
+          </p>
+        </div>
+
+        <pre
+          style={{
+            margin: "16px 0 0",
+            padding: 16,
+            borderRadius: 16,
+            background: "rgba(0,0,0,0.28)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#dbeafe",
+            fontSize: "0.82rem",
+            lineHeight: 1.55,
+            overflowX: "auto",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {JSON.stringify(
+            {
+              kpisLoading,
+              kpisError,
+              kpis,
+            },
+            null,
+            2
+          )}
+        </pre>
+      </section>
     </div>
   );
 }
@@ -1128,6 +1195,39 @@ function EmbeddedUserDetail({ userId, onBack }) {
           <InfoCard label="User ID" value={String(user.id)} />
         </div>
       </section>
+    </div>
+  );
+}
+
+function StatCard({ title, value, subtext, glow }) {
+  return (
+    <div style={statCardStyle}>
+      <Glow color={glow} />
+
+      <div>
+        <div style={labelStyle}>{title}</div>
+        <div
+          style={{
+            marginTop: 20,
+            fontSize: "2.3rem",
+            fontWeight: 900,
+            letterSpacing: "-0.04em",
+            color: "#ffffff",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          color: "#cbd5e1",
+          fontSize: "0.95rem",
+        }}
+      >
+        {subtext}
+      </div>
     </div>
   );
 }
