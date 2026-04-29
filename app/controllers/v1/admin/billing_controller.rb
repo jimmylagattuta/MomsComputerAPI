@@ -1,4 +1,6 @@
 class V1::Admin::BillingController < ApplicationController
+  include JwtAuth
+
   before_action :authenticate_user!
   before_action :require_admin!
 
