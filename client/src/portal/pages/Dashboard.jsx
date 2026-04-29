@@ -125,10 +125,72 @@ export default function Dashboard() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState("");
 
+  const [kpis, setKpis] = useState(null);
+  const [kpisLoading, setKpisLoading] = useState(true);
+  const [kpisError, setKpisError] = useState("");
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUserId, setSelectedUserId] = useState(null);
+
+  useEffect(() => {
+    const loadKpis = async () => {
+      try {
+        console.log("[Portal Dashboard] Starting KPI load...");
+
+        setKpisLoading(true);
+        setKpisError("");
+
+        const token = localStorage.getItem("portalToken");
+
+        console.log("[Portal Dashboard] portalToken exists?", Boolean(token));
+        console.log("[Portal Dashboard] Fetching /v1/admin/billing/kpis");
+
+        const response = await fetch("/v1/admin/billing/kpis", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        console.log("[Portal Dashboard] KPI response status:", response.status);
+        console.log("[Portal Dashboard] KPI response ok?", response.ok);
+
+        let data = null;
+
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error("[Portal Dashboard] KPI JSON parse failed:", jsonError);
+          data = null;
+        }
+
+        console.log("[Portal Dashboard] KPI raw response data:", data);
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message || data?.error || "Failed to load billing KPIs."
+          );
+        }
+
+        setKpis(data);
+
+        console.log("[Portal Dashboard] KPI state updated:", data);
+      } catch (err) {
+        console.error("[Portal Dashboard] KPI load error:", err);
+
+        setKpis(null);
+        setKpisError(err.message || "Failed to load billing KPIs.");
+      } finally {
+        console.log("[Portal Dashboard] KPI load finished.");
+        setKpisLoading(false);
+      }
+    };
+
+    loadKpis();
+  }, []);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -138,6 +200,10 @@ export default function Dashboard() {
 
         const token = localStorage.getItem("portalToken");
 
+        console.log("[Portal Dashboard] Starting users load...");
+        console.log("[Portal Dashboard] portalToken exists?", Boolean(token));
+        console.log("[Portal Dashboard] Fetching /v1/admin/users");
+
         const response = await fetch("/v1/admin/users", {
           method: "GET",
           headers: {
@@ -146,12 +212,19 @@ export default function Dashboard() {
           },
         });
 
+        console.log("[Portal Dashboard] Users response status:", response.status);
+        console.log("[Portal Dashboard] Users response ok?", response.ok);
+
         let data = null;
+
         try {
           data = await response.json();
-        } catch (_err) {
+        } catch (jsonError) {
+          console.error("[Portal Dashboard] Users JSON parse failed:", jsonError);
           data = null;
         }
+
+        console.log("[Portal Dashboard] Users raw response data:", data);
 
         if (!response.ok) {
           throw new Error(data?.message || data?.error || "Failed to load users.");
@@ -163,11 +236,17 @@ export default function Dashboard() {
           ? data.users
           : [];
 
+        console.log("[Portal Dashboard] Normalized users:", normalizedUsers);
+        console.log("[Portal Dashboard] Normalized user count:", normalizedUsers.length);
+
         setUsers(normalizedUsers);
       } catch (err) {
+        console.error("[Portal Dashboard] Users load error:", err);
+
         setUsers([]);
         setUsersError(err.message || "Failed to load users.");
       } finally {
+        console.log("[Portal Dashboard] Users load finished.");
         setUsersLoading(false);
       }
     };
@@ -306,28 +385,93 @@ export default function Dashboard() {
       >
         <StatCard
           title="MRR"
-          value="--"
+          value={
+            kpisLoading
+              ? "..."
+              : kpisError
+              ? "Error"
+              : formatMoneyFromCents(kpis?.mrr_cents)
+          }
           subtext="Monthly recurring revenue"
           glow="rgba(34,211,238,0.18)"
         />
+
         <StatCard
           title="Subscriptions"
-          value="--"
+          value={
+            kpisLoading
+              ? "..."
+              : kpisError
+              ? "Error"
+              : formatNumber(kpis?.active_subscribers)
+          }
           subtext="Currently active subscriptions"
           glow="rgba(168,85,247,0.18)"
         />
+
         <StatCard
           title="Users"
-          value={usersLoading ? "..." : String(users.length)}
+          value={
+            kpisLoading
+              ? "..."
+              : kpisError
+              ? usersLoading
+                ? "..."
+                : String(users.length)
+              : formatNumber(kpis?.total_users)
+          }
           subtext="Total registered users"
           glow="rgba(244,114,182,0.18)"
         />
+
         <StatCard
-          title="Past Due"
-          value="--"
+          title="Billing Issues"
+          value={
+            kpisLoading
+              ? "..."
+              : kpisError
+              ? "Error"
+              : formatNumber(kpis?.billing_issue_subscribers)
+          }
           subtext="Accounts needing attention"
           glow="rgba(250,204,21,0.16)"
         />
+      </section>
+
+      <section style={cardStyle}>
+        <Glow color="rgba(34,211,238,0.10)" />
+
+        <div>
+          <h2 style={sectionTitleStyle}>Billing KPI Debug</h2>
+          <p style={sectionSubtextStyle}>
+            Temporary console/debug view for backend portal data.
+          </p>
+        </div>
+
+        <pre
+          style={{
+            margin: "16px 0 0",
+            padding: 16,
+            borderRadius: 16,
+            background: "rgba(0,0,0,0.28)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#dbeafe",
+            fontSize: "0.82rem",
+            lineHeight: 1.55,
+            overflowX: "auto",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {JSON.stringify(
+            {
+              kpisLoading,
+              kpisError,
+              kpis,
+            },
+            null,
+            2
+          )}
+        </pre>
       </section>
 
       {selectedUserId ? (
@@ -690,10 +834,15 @@ function EmbeddedUserDetail({ userId, onBack }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
+        console.log("[Portal Dashboard] Starting embedded user load:", userId);
+
         setLoading(true);
         setError("");
 
         const token = localStorage.getItem("portalToken");
+
+        console.log("[Portal Dashboard] portalToken exists?", Boolean(token));
+        console.log(`[Portal Dashboard] Fetching /v1/admin/users/${userId}`);
 
         const response = await fetch(`/v1/admin/users/${userId}`, {
           method: "GET",
@@ -703,23 +852,36 @@ function EmbeddedUserDetail({ userId, onBack }) {
           },
         });
 
+        console.log("[Portal Dashboard] Embedded user response status:", response.status);
+        console.log("[Portal Dashboard] Embedded user response ok?", response.ok);
+
         let data = null;
+
         try {
           data = await response.json();
-        } catch (_err) {
+        } catch (jsonError) {
+          console.error("[Portal Dashboard] Embedded user JSON parse failed:", jsonError);
           data = null;
         }
+
+        console.log("[Portal Dashboard] Embedded user raw response data:", data);
 
         if (!response.ok) {
           throw new Error(data?.message || data?.error || "Failed to load user.");
         }
 
         const normalizedUser = data?.user || data;
+
+        console.log("[Portal Dashboard] Embedded normalized user:", normalizedUser);
+
         setUser(normalizedUser || null);
       } catch (err) {
+        console.error("[Portal Dashboard] Embedded user load error:", err);
+
         setError(err.message || "Failed to load user.");
         setUser(null);
       } finally {
+        console.log("[Portal Dashboard] Embedded user load finished.");
         setLoading(false);
       }
     };
@@ -1141,4 +1303,19 @@ function formatDateTime(value) {
   } catch (_err) {
     return "—";
   }
+}
+
+function formatMoneyFromCents(cents) {
+  const safeCents = Number.isFinite(Number(cents)) ? Number(cents) : 0;
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(safeCents / 100);
+}
+
+function formatNumber(value) {
+  const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+
+  return new Intl.NumberFormat("en-US").format(safeValue);
 }
