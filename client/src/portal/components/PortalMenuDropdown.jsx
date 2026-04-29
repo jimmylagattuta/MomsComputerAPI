@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const PANEL_OPTIONS = [
   {
@@ -42,7 +42,7 @@ const menuButtonStyle = {
   alignItems: "center",
   justifyContent: "center",
   gap: 8,
-  minWidth: 180,
+  minWidth: 150,
 };
 
 const dropdownStyle = {
@@ -90,15 +90,6 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
 
-  const currentPanel = useMemo(() => {
-    const normalizedActivePanel = activePanel === "overview" ? "users" : activePanel;
-
-    return (
-      PANEL_OPTIONS.find((option) => option.panelName === normalizedActivePanel) ||
-      PANEL_OPTIONS[0]
-    );
-  }, [activePanel]);
-
   useEffect(() => {
     const handleDocumentClick = (event) => {
       if (!wrapperRef.current) return;
@@ -127,6 +118,7 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
     return (
       <button
         type="button"
+        key={panelName}
         onClick={() => handleSelectPanel(panelName)}
         style={{
           ...itemStyle,
@@ -149,10 +141,7 @@ export default function PortalMenuDropdown({ activePanel, onSelectPanel, onLogou
         onClick={() => setOpen((prev) => !prev)}
         style={menuButtonStyle}
       >
-        <span>
-          {currentPanel.emoji} {currentPanel.label}
-        </span>
-        <span>{open ? "▲" : "▼"}</span>
+        Portal Menu {open ? "▲" : "▼"}
       </button>
 
       {open ? (

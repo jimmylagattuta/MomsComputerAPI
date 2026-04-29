@@ -8,6 +8,7 @@ import EmbeddedUserDetail from "../components/EmbeddedUserDetail";
 import BillingDebugPanel from "../components/BillingDebugPanel";
 import TransactionsPanel from "../components/TransactionsPanel";
 import SimplePortalPanel from "../components/SimplePortalPanel";
+import ActivePanelHeader from "../components/ActivePanelHeader";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function Dashboard() {
 
   const [selectedUserId, setSelectedUserId] = useState(null);
 
-  // Main dashboard landing page is the users table again.
+  // Main dashboard landing page is the users table.
   const [activePanel, setActivePanel] = useState("users");
 
   useEffect(() => {
@@ -191,7 +192,6 @@ export default function Dashboard() {
   const handleSelectPanel = (panelName) => {
     setSelectedUserId(null);
 
-    // If someone clicks Overview, send them back to the real main dashboard.
     if (panelName === "overview") {
       setActivePanel("users");
       return;
@@ -217,6 +217,8 @@ export default function Dashboard() {
         displayMrrCents={displayMrrCents}
         displaySubscribers={displaySubscribers}
       />
+
+      <ActivePanelHeader activePanel={activePanel} />
 
       {activePanel === "users" && selectedUserId ? (
         <EmbeddedUserDetail
