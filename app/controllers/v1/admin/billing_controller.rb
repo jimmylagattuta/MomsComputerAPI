@@ -12,14 +12,11 @@ class V1::Admin::BillingController < ApplicationController
     transactions = SubscriptionTransaction.all
     subscriptions = Subscription.all
 
-    revenue_this_month_cents = transactions
-      .where("purchased_at >= ?", start_of_month)
-      .sum(:price_cents)
+    monthly_transactions = transactions.where("purchased_at >= ?", start_of_month)
+    yearly_transactions = transactions.where("purchased_at >= ?", start_of_year)
 
-    revenue_this_year_cents = transactions
-      .where("purchased_at >= ?", start_of_year)
-      .sum(:price_cents)
-
+    revenue_this_month_cents = monthly_transactions.sum(:price_cents)
+    revenue_this_year_cents = yearly_transactions.sum(:price_cents)
     total_revenue_cents = transactions.sum(:price_cents)
 
     active_subscribers = subscriptions
@@ -43,15 +40,8 @@ class V1::Admin::BillingController < ApplicationController
       .distinct
       .count(:user_id)
 
-    monthly_active_revenue_cents = subscriptions
-      .where(status: "active")
-      .where("product_id ILIKE ? OR billing_period ILIKE ?", "%monthly%", "%monthly%")
-      .count * 999
-
-    yearly_active_revenue_cents = subscriptions
-      .where(status: "active")
-      .where("product_id ILIKE ? OR billing_period ILIKE ?", "%yearly%", "%yearly%")
-      .count * 9999
+    monthly_active_revenue_cents = active_subscription_count_for_period("monthly") * 999
+    yearly_active_revenue_cents = active_subscription_count_for_period("yearly") * 9999
 
     mrr_cents = monthly_active_revenue_cents + (yearly_active_revenue_cents / 12.0)
 
@@ -59,28 +49,55 @@ class V1::Admin::BillingController < ApplicationController
       mrr_cents = revenue_this_month_cents
     end
 
-    revenue_by_platform = transactions
-      .group(:store)
-      .sum(:price_cents)
-      .transform_keys { |key| key.presence || "UNKNOWN" }
+    revenue_by_platform_this_month = revenue_by_platform_for(monthly_transactions)
+    revenue_by_platform_this_year = revenue_by_platform_for(yearly_transactions)
+    revenue_by_platform = revenue_by_platform_for(transactions)
+
+    subscribers_by_platform = subscribers_by_platform_for(subscriptions)
+    active_subscribers_by_platform = subscribers_by_platform_for(
+      subscriptions.where(status: "active")
+    )
 
     revenue_by_product = transactions
       .group(:product_id)
       .sum(:price_cents)
       .transform_keys { |key| key.presence || "UNKNOWN" }
+      .transform_values(&:to_i)
+
+    revenue_by_product_this_month = monthly_transactions
+      .group(:product_id)
+      .sum(:price_cents)
+      .transform_keys { |key| key.presence || "UNKNOWN" }
+      .transform_values(&:to_i)
+
+    revenue_by_product_this_year = yearly_transactions
+      .group(:product_id)
+      .sum(:price_cents)
+      .transform_keys { |key| key.presence || "UNKNOWN" }
+      .transform_values(&:to_i)
 
     render json: {
       mrr_cents: mrr_cents.round,
       revenue_this_month_cents: revenue_this_month_cents.to_i,
       revenue_this_year_cents: revenue_this_year_cents.to_i,
       total_revenue_cents: total_revenue_cents.to_i,
+
       active_subscribers: active_subscribers,
       billing_issue_subscribers: billing_issue_subscribers,
       cancelled_subscribers: cancelled_subscribers,
       expired_subscribers: expired_subscribers,
       total_users: User.count,
       paying_users: paying_users,
+
+      revenue_by_platform_this_month: revenue_by_platform_this_month,
+      revenue_by_platform_this_year: revenue_by_platform_this_year,
       revenue_by_platform: revenue_by_platform,
+
+      subscribers_by_platform: subscribers_by_platform,
+      active_subscribers_by_platform: active_subscribers_by_platform,
+
+      revenue_by_product_this_month: revenue_by_product_this_month,
+      revenue_by_product_this_year: revenue_by_product_this_year,
       revenue_by_product: revenue_by_product
     }, status: :ok
   end
@@ -135,6 +152,54 @@ class V1::Admin::BillingController < ApplicationController
     unless current_user&.role == "admin"
       render json: { error: "admin_required" }, status: :forbidden
     end
+  end
+
+  def active_subscription_count_for_period(period)
+    normalized_period = period.to_s.downcase
+
+    Subscription
+      .where(status: "active")
+      .where(
+        "#{case_insensitive_like_sql('product_id')} OR #{case_insensitive_like_sql('billing_period')}",
+        "%#{normalized_period}%",
+        "%#{normalized_period}%"
+      )
+      .count
+  end
+
+  def revenue_by_platform_for(scope)
+    scope
+      .group(:store)
+      .sum(:price_cents)
+      .transform_keys { |key| normalize_store_key(key) }
+      .transform_values(&:to_i)
+  end
+
+  def subscribers_by_platform_for(scope)
+    scope
+      .group(:store)
+      .count
+      .transform_keys { |key| normalize_store_key(key) }
+      .transform_values(&:to_i)
+  end
+
+  def normalize_store_key(value)
+    normalized_value = value.to_s.strip.upcase
+
+    return "UNKNOWN" if normalized_value.blank?
+
+    case normalized_value
+    when "APP_STORE", "APPLE", "IOS", "APPSTORE", "APP-STORE"
+      "APP_STORE"
+    when "PLAY_STORE", "GOOGLE_PLAY", "ANDROID", "GOOGLE", "PLAYSTORE", "PLAY-STORE"
+      "PLAY_STORE"
+    else
+      normalized_value
+    end
+  end
+
+  def case_insensitive_like_sql(column_name)
+    "LOWER(COALESCE(#{column_name}, '')) LIKE ?"
   end
 
   def money_hash(cents)

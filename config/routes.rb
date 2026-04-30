@@ -47,7 +47,17 @@ Rails.application.routes.draw do
         get :subscribers,         to: "/v1/admin/billing#subscribers"
       end
 
-      resources :users, only: [:index, :show, :update]
+      resources :users, only: [:index, :show, :update] do
+        member do
+          get   :control_center,    to: "user_controls#show"
+          patch :control_calls,     to: "user_controls#update_calls"
+          patch :control_account,   to: "user_controls#update_account"
+          patch :control_messaging, to: "user_controls#update_messaging"
+          patch :control_access,    to: "user_controls#update_access"
+          patch :control_security,  to: "user_controls#update_security"
+        end
+      end
+
       resources :subscriptions, only: [:index, :show, :update]
       resources :support_threads, only: [:index, :show]
     end

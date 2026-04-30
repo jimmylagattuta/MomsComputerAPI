@@ -5,7 +5,21 @@ import { cardStyle, labelStyle } from "../styles/portalStyles";
 const LOGO_URL =
   "https://res.cloudinary.com/djtsuktwb/image/upload/v1769703507/ChatGPT_Image_Jan_29_2026_08_00_07_AM_1_3_gtqeo8.jpg";
 
-export default function PortalHeader({ activePanel, onSelectPanel, onLogout }) {
+export default function PortalHeader({
+  activePanel,
+  onSelectPanel,
+  onLogoClick,
+  onLogout,
+}) {
+  const handleLogoClick = () => {
+    if (typeof onLogoClick === "function") {
+      onLogoClick();
+      return;
+    }
+
+    onSelectPanel("users");
+  };
+
   return (
     <section
       style={{
@@ -16,8 +30,6 @@ export default function PortalHeader({ activePanel, onSelectPanel, onLogout }) {
         alignItems: "center",
         gap: 18,
         flexWrap: "wrap",
-
-        // IMPORTANT: lets the dropdown escape the card
         overflow: "visible",
         zIndex: 1000,
       }}
@@ -30,7 +42,11 @@ export default function PortalHeader({ activePanel, onSelectPanel, onLogout }) {
           flexWrap: "wrap",
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={handleLogoClick}
+          title="Go to main panel"
+          aria-label="Go to main panel"
           style={{
             width: 70,
             height: 70,
@@ -42,6 +58,22 @@ export default function PortalHeader({ activePanel, onSelectPanel, onLogout }) {
             display: "grid",
             placeItems: "center",
             flexShrink: 0,
+            cursor: "pointer",
+            transition:
+              "transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease",
+          }}
+          onMouseEnter={(event) => {
+            event.currentTarget.style.transform = "translateY(-2px)";
+            event.currentTarget.style.borderColor = "rgba(147,197,253,0.28)";
+            event.currentTarget.style.background = "rgba(255,255,255,0.09)";
+            event.currentTarget.style.boxShadow =
+              "0 16px 44px rgba(0,0,0,0.34), 0 0 22px rgba(147,197,253,0.10)";
+          }}
+          onMouseLeave={(event) => {
+            event.currentTarget.style.transform = "translateY(0)";
+            event.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+            event.currentTarget.style.background = "rgba(255,255,255,0.06)";
+            event.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.28)";
           }}
         >
           <img
@@ -53,9 +85,10 @@ export default function PortalHeader({ activePanel, onSelectPanel, onLogout }) {
               objectFit: "contain",
               borderRadius: 14,
               display: "block",
+              pointerEvents: "none",
             }}
           />
-        </div>
+        </button>
 
         <div>
           <div style={{ ...labelStyle, marginBottom: 14 }}>Admin Portal</div>

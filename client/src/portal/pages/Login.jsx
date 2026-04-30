@@ -1,17 +1,70 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const LOGO_URL =
   "https://res.cloudinary.com/djtsuktwb/image/upload/v1769703507/ChatGPT_Image_Jan_29_2026_08_00_07_AM_1_3_gtqeo8.jpg";
 
+const LOGIN_URL = "/v1/auth/login";
+
 export default function Login() {
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const canSubmit = useMemo(() => {
-    return email.trim() && password.trim() && !isLoading;
+    return email.trim().length > 0 && password.trim().length > 0 && !isLoading;
   }, [email, password, isLoading]);
+
+  const debugLog = (label, payload = null) => {
+    console.log(`🧪 [PORTAL LOGIN] ${label}`, payload || "");
+  };
+
+  const syncAutofilledFields = () => {
+    const browserEmail = emailRef.current?.value || "";
+    const browserPassword = passwordRef.current?.value || "";
+
+    debugLog("syncAutofilledFields", {
+      browserEmail,
+      browserPasswordLength: browserPassword.length,
+      stateEmail: email,
+      statePasswordLength: password.length,
+    });
+
+    if (browserEmail && browserEmail !== email) {
+      setEmail(browserEmail);
+    }
+
+    if (browserPassword && browserPassword !== password) {
+      setPassword(browserPassword);
+    }
+  };
+
+  useEffect(() => {
+    debugLog("Login component mounted", {
+      locationHref: window.location.href,
+      origin: window.location.origin,
+      pathname: window.location.pathname,
+      loginUrl: LOGIN_URL,
+    });
+
+    syncAutofilledFields();
+
+    const timeoutOne = setTimeout(syncAutofilledFields, 100);
+    const timeoutTwo = setTimeout(syncAutofilledFields, 500);
+    const timeoutThree = setTimeout(syncAutofilledFields, 1000);
+
+    return () => {
+      clearTimeout(timeoutOne);
+      clearTimeout(timeoutTwo);
+      clearTimeout(timeoutThree);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const extractErrorMessage = (data, response) => {
     const raw =
@@ -30,6 +83,7 @@ export default function Login() {
       if (Array.isArray(data?.details) && data.details.length > 0) {
         return data.details[0];
       }
+
       return "Please check your information and try again.";
     }
 
@@ -55,39 +109,109 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (isLoading) return;
+    debugLog("SUBMIT EVENT FIRED");
 
-    const trimmedEmail = email.trim().toLowerCase();
-    const trimmedPassword = password.trim();
+    if (isLoading) {
+      debugLog("Submit blocked because isLoading is true");
+      return;
+    }
+
+    const browserEmail = emailRef.current?.value || email;
+    const browserPassword = passwordRef.current?.value || password;
+
+    const trimmedEmail = browserEmail.trim().toLowerCase();
+    const trimmedPassword = browserPassword.trim();
+
+    debugLog("Read form values", {
+      browserEmail,
+      trimmedEmail,
+      browserPasswordLength: browserPassword.length,
+      trimmedPasswordLength: trimmedPassword.length,
+      stateEmail: email,
+      statePasswordLength: password.length,
+    });
+
+    setEmail(browserEmail);
+    setPassword(browserPassword);
 
     if (!trimmedEmail || !trimmedPassword) {
+      debugLog("Submit stopped because email or password is missing", {
+        hasEmail: Boolean(trimmedEmail),
+        hasPassword: Boolean(trimmedPassword),
+      });
+
       setError("Please enter your email and password.");
       return;
     }
 
+    const requestBody = {
+      user: {
+        email: trimmedEmail,
+        password: trimmedPassword,
+      },
+    };
+
+    debugLog("About to send fetch", {
+      loginUrl: LOGIN_URL,
+      fullBrowserResolvedUrl: new URL(LOGIN_URL, window.location.origin).href,
+      requestBodyPreview: {
+        user: {
+          email: requestBody.user.email,
+          passwordLength: requestBody.user.password.length,
+        },
+      },
+    });
+
     setError("");
     setIsLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      debugLog("Fetch timeout hit after 10 seconds; aborting request");
+      controller.abort();
+    }, 10000);
+
     try {
-      const response = await fetch("/v1/auth/login", {
+      const response = await fetch(LOGIN_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
-        body: JSON.stringify({
-          user: {
-            email: trimmedEmail,
-            password: trimmedPassword,
-          },
-        }),
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      debugLog("Fetch response received", {
+        status: response.status,
+        ok: response.ok,
+        redirected: response.redirected,
+        responseUrl: response.url,
+        contentType: response.headers.get("content-type"),
+      });
+
+      const responseText = await response.text();
+
+      debugLog("Raw response text", {
+        responseText,
       });
 
       let data = null;
+
       try {
-        data = await response.json();
-      } catch (_jsonError) {
+        data = responseText ? JSON.parse(responseText) : null;
+      } catch (jsonError) {
+        debugLog("Response was not valid JSON", {
+          jsonErrorMessage: jsonError.message,
+          responseText,
+        });
+
         data = null;
       }
+
+      debugLog("Parsed response data", data);
 
       if (!response.ok) {
         throw new Error(extractErrorMessage(data, response));
@@ -97,6 +221,12 @@ export default function Login() {
         throw new Error("Login succeeded, but no token was returned.");
       }
 
+      debugLog("Login succeeded; saving token and redirecting", {
+        userId: data.user?.id,
+        email: data.user?.email,
+        role: data.user?.role,
+      });
+
       localStorage.setItem("portalToken", data.token);
 
       if (data.user) {
@@ -105,8 +235,52 @@ export default function Login() {
 
       window.location.href = "/portal/dashboard";
     } catch (err) {
-      setError(err.message || "Something went wrong while signing in.");
+      clearTimeout(timeoutId);
+
+      debugLog("Fetch/login crashed", {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+      });
+
+      if (err.name === "AbortError") {
+        setError(
+          "The login request timed out. The React app may not be reaching the Rails API."
+        );
+      } else if (err.message === "Failed to fetch") {
+        setError(
+          "The login request never reached the API. Check the React proxy and Rails server."
+        );
+      } else {
+        setError(err.message || "Something went wrong while signing in.");
+      }
+
       setIsLoading(false);
+    }
+  };
+
+  const handleDebugDirectBrowserProbe = async () => {
+    debugLog("Manual debug probe clicked");
+
+    try {
+      const response = await fetch(LOGIN_URL, {
+        method: "OPTIONS",
+      });
+
+      debugLog("Manual OPTIONS probe response", {
+        status: response.status,
+        ok: response.ok,
+        url: response.url,
+      });
+    } catch (err) {
+      debugLog("Manual OPTIONS probe failed", {
+        name: err.name,
+        message: err.message,
+      });
+
+      setError(
+        "Debug probe failed before reaching Rails. This points to proxy/dev-server setup."
+      );
     }
   };
 
@@ -236,34 +410,62 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} style={{ display: "grid", gap: "14px" }}>
             <input
+              ref={emailRef}
               type="email"
               placeholder="Email"
               style={inputStyle}
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onInput={(e) => setEmail(e.currentTarget.value)}
+              onAnimationStart={syncAutofilledFields}
+              onFocus={syncAutofilledFields}
               disabled={isLoading}
             />
 
-            <input
-              type="password"
-              placeholder="Password"
-              style={inputStyle}
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isLoading}
-            />
+            <div style={passwordFieldWrapperStyle}>
+              <input
+                ref={passwordRef}
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                style={passwordInputStyle}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onInput={(e) => setPassword(e.currentTarget.value)}
+                onAnimationStart={syncAutofilledFields}
+                onFocus={syncAutofilledFields}
+                disabled={isLoading}
+              />
+
+              <button
+                type="button"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+                onClick={() => {
+                  syncAutofilledFields();
+                  setShowPassword((currentValue) => !currentValue);
+                }}
+                disabled={isLoading}
+                style={{
+                  ...eyeButtonStyle,
+                  cursor: isLoading ? "wait" : "pointer",
+                  opacity: isLoading ? 0.55 : 1,
+                }}
+              >
+                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
 
             {error ? <div style={errorStyle}>{error}</div> : null}
 
             <button
               type="submit"
-              disabled={!canSubmit}
+              disabled={isLoading}
               style={{
                 ...buttonStyle,
-                opacity: canSubmit ? 1 : 0.72,
-                cursor: canSubmit ? "pointer" : "not-allowed",
+                opacity: isLoading ? 0.72 : 1,
+                cursor: isLoading ? "wait" : "pointer",
                 position: "relative",
                 overflow: "hidden",
               }}
@@ -303,6 +505,14 @@ export default function Login() {
                 {isLoading ? "Signing In..." : "Sign In"}
               </span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleDebugDirectBrowserProbe}
+              style={debugButtonStyle}
+            >
+              Debug API Probe
+            </button>
           </form>
         </div>
       </div>
@@ -317,9 +527,102 @@ export default function Login() {
               transform: scaleX(1);
             }
           }
+
+          @keyframes portalAutoFillStart {
+            from {
+              opacity: 1;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+
+          input:-webkit-autofill {
+            animation-name: portalAutoFillStart;
+            animation-duration: 0.01s;
+            animation-iteration-count: 1;
+            -webkit-text-fill-color: #081120;
+            box-shadow: 0 0 0 1000px #e8f0fe inset;
+          }
+
+          input:-webkit-autofill + button {
+            color: #081120;
+          }
         `}
       </style>
     </div>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M2.25 12s3.5-6.75 9.75-6.75S21.75 12 21.75 12 18.25 18.75 12 18.75 2.25 12 2.25 12Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M3 3l18 18"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M10.58 10.58a2.1 2.1 0 0 0 2.84 2.84"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.1 5.6A10.7 10.7 0 0 1 12 5.25c6.25 0 9.75 6.75 9.75 6.75a18.1 18.1 0 0 1-3.02 3.92"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.12 6.03a3.28 3.28 0 0 1 3.85 3.85"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6.42 6.92C3.7 8.77 2.25 12 2.25 12S5.75 18.75 12 18.75c1.7 0 3.18-.5 4.43-1.19"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -335,6 +638,35 @@ const inputStyle = {
   boxSizing: "border-box",
 };
 
+const passwordFieldWrapperStyle = {
+  width: "100%",
+  position: "relative",
+  display: "flex",
+  alignItems: "center",
+};
+
+const passwordInputStyle = {
+  ...inputStyle,
+  paddingRight: "54px",
+};
+
+const eyeButtonStyle = {
+  position: "absolute",
+  right: "10px",
+  top: "50%",
+  transform: "translateY(-50%)",
+  width: "38px",
+  height: "38px",
+  border: "none",
+  borderRadius: "12px",
+  background: "rgba(8,17,32,0.08)",
+  color: "#081120",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+};
+
 const buttonStyle = {
   marginTop: "4px",
   border: "none",
@@ -345,6 +677,18 @@ const buttonStyle = {
   color: "#081120",
   background: "linear-gradient(135deg, #67e8f9 0%, #a78bfa 50%, #f472b6 100%)",
   boxShadow: "0 16px 34px rgba(103,232,249,0.20)",
+};
+
+const debugButtonStyle = {
+  marginTop: "2px",
+  border: "1px solid rgba(103,232,249,0.28)",
+  borderRadius: "14px",
+  padding: "11px 14px",
+  fontWeight: 800,
+  fontSize: "0.86rem",
+  color: "#67e8f9",
+  background: "rgba(103,232,249,0.08)",
+  cursor: "pointer",
 };
 
 const errorStyle = {

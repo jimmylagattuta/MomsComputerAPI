@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import UserControlCenter from "../components/users/controlCenter/UserControlCenter";
 
 const pageCardStyle = {
   position: "relative",
@@ -310,6 +311,8 @@ export default function UserShow() {
           <InfoCard label="User ID" value={String(user.id)} />
         </div>
       </section>
+
+      <UserControlCenter userId={id} />
     </div>
   );
 }

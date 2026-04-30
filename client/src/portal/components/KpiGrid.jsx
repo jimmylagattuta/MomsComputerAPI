@@ -10,6 +10,10 @@ export default function KpiGrid({
   totalUsers,
   displayMrrCents,
   displaySubscribers,
+  onMrrCardClick,
+  onSubscriptionsCardClick,
+  onUsersCardClick,
+  onBillingIssuesCardClick,
 }) {
   return (
     <section
@@ -30,6 +34,7 @@ export default function KpiGrid({
         }
         subtext="Monthly recurring revenue"
         glow="rgba(34,211,238,0.18)"
+        onClick={onMrrCardClick}
       />
 
       <StatCard
@@ -41,8 +46,9 @@ export default function KpiGrid({
             ? "Error"
             : formatNumber(displaySubscribers)
         }
-        subtext="Transaction-backed paying users"
+        subtext="Click to view subscribers"
         glow="rgba(168,85,247,0.18)"
+        onClick={onSubscriptionsCardClick}
       />
 
       <StatCard
@@ -56,8 +62,9 @@ export default function KpiGrid({
               : String(totalUsers)
             : formatNumber(kpis?.total_users)
         }
-        subtext="Total registered users"
+        subtext="Click to jump to users table"
         glow="rgba(244,114,182,0.18)"
+        onClick={onUsersCardClick}
       />
 
       <StatCard
@@ -71,6 +78,7 @@ export default function KpiGrid({
         }
         subtext="Accounts needing attention"
         glow="rgba(250,204,21,0.16)"
+        onClick={onBillingIssuesCardClick}
       />
     </section>
   );

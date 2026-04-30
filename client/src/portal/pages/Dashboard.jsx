@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PortalHeader from "../components/PortalHeader";
@@ -7,11 +7,22 @@ import UsersPanel from "../components/UsersPanel";
 import EmbeddedUserDetail from "../components/EmbeddedUserDetail";
 import BillingDebugPanel from "../components/BillingDebugPanel";
 import TransactionsPanel from "../components/TransactionsPanel";
-import SimplePortalPanel from "../components/SimplePortalPanel";
 import ActivePanelHeader from "../components/ActivePanelHeader";
+import SubscribersPanel from "../components/SubscribersPanel";
+import BillingIssuesPanel from "../components/BillingIssuesPanel";
+import BillingIssueUserDetail from "../components/BillingIssueUserDetail";
+import RevenueOverviewPanel from "../components/revenue/RevenueOverviewPanel";
+import RecentEventsPanel from "../components/RecentEventsPanel";
+import CancelledUsersPanel from "../components/CancelledUsersPanel";
+import ExpiredUsersPanel from "../components/ExpiredUsersPanel";
+import WebhookAuditPanel from "../components/WebhookAuditPanel";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  const usersTableRef = useRef(null);
+  const currentMenuRef = useRef(null);
+  const revenueCommandCenterRef = useRef(null);
 
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -22,15 +33,17 @@ export default function Dashboard() {
   const [kpisError, setKpisError] = useState("");
 
   const [selectedUserId, setSelectedUserId] = useState(null);
+  const [selectedBillingIssue, setSelectedBillingIssue] = useState(null);
 
-  // Main dashboard landing page is the users table.
   const [activePanel, setActivePanel] = useState("users");
+  const [pendingScrollTarget, setPendingScrollTarget] = useState(null);
+
+  const showActivePanelHeader = activePanel !== "revenue_overview";
 
   useEffect(() => {
     const token = localStorage.getItem("portalToken");
 
     if (!token) {
-      console.log("[Portal Dashboard] No portalToken found. Redirecting to login.");
       navigate("/login", { replace: true });
     }
   }, [navigate]);
@@ -38,8 +51,6 @@ export default function Dashboard() {
   useEffect(() => {
     const loadKpis = async () => {
       try {
-        console.log("[Portal Dashboard] Starting KPI load...");
-
         setKpisLoading(true);
         setKpisError("");
 
@@ -60,9 +71,6 @@ export default function Dashboard() {
         } catch (jsonError) {
           console.error("[Portal Dashboard] KPI JSON parse failed:", jsonError);
         }
-
-        console.log("[Portal Dashboard] KPI response status:", response.status);
-        console.log("[Portal Dashboard] KPI raw response data:", data);
 
         if (!response.ok) {
           throw new Error(
@@ -87,8 +95,6 @@ export default function Dashboard() {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        console.log("[Portal Dashboard] Starting users load...");
-
         setUsersLoading(true);
         setUsersError("");
 
@@ -110,9 +116,6 @@ export default function Dashboard() {
           console.error("[Portal Dashboard] Users JSON parse failed:", jsonError);
         }
 
-        console.log("[Portal Dashboard] Users response status:", response.status);
-        console.log("[Portal Dashboard] Users raw response data:", data);
-
         if (!response.ok) {
           throw new Error(data?.message || data?.error || "Failed to load users.");
         }
@@ -120,8 +123,8 @@ export default function Dashboard() {
         const normalizedUsers = Array.isArray(data)
           ? data
           : Array.isArray(data?.users)
-          ? data.users
-          : [];
+            ? data.users
+            : [];
 
         setUsers(normalizedUsers);
       } catch (err) {
@@ -137,6 +140,51 @@ export default function Dashboard() {
     loadUsers();
   }, []);
 
+  useEffect(() => {
+    if (!pendingScrollTarget) return;
+
+    let timeoutId = null;
+    let frameOne = null;
+    let frameTwo = null;
+
+    frameOne = window.requestAnimationFrame(() => {
+      frameTwo = window.requestAnimationFrame(() => {
+        timeoutId = window.setTimeout(() => {
+          if (pendingScrollTarget === "currentMenu") {
+            if (activePanel === "subscribers" || activePanel === "billing_issues") {
+              return;
+            }
+
+            scrollElementToTop(currentMenuRef.current, 0);
+            setPendingScrollTarget(null);
+            return;
+          }
+
+          if (pendingScrollTarget === "usersTable") {
+            scrollElementToTop(usersTableRef.current, 24);
+            setPendingScrollTarget(null);
+            return;
+          }
+
+          if (pendingScrollTarget === "revenueCommandCenter") {
+            if (activePanel === "revenue_overview") {
+              return;
+            }
+
+            scrollElementToTop(revenueCommandCenterRef.current, 0);
+            setPendingScrollTarget(null);
+          }
+        }, 250);
+      });
+    });
+
+    return () => {
+      if (frameOne) window.cancelAnimationFrame(frameOne);
+      if (frameTwo) window.cancelAnimationFrame(frameTwo);
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [activePanel, pendingScrollTarget]);
+
   const displayMrrCents = useMemo(() => {
     return Number(kpis?.mrr_cents || 0) > 0
       ? kpis?.mrr_cents
@@ -149,11 +197,88 @@ export default function Dashboard() {
       : kpis?.paying_users;
   }, [kpis]);
 
+  const goToMainPanel = () => {
+    setSelectedUserId(null);
+    setSelectedBillingIssue(null);
+    setActivePanel("users");
+    setPendingScrollTarget(null);
+
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      }, 50);
+    });
+  };
+
+  const scrollToUsersTable = () => {
+    setSelectedUserId(null);
+    setSelectedBillingIssue(null);
+    setActivePanel("users");
+    setPendingScrollTarget("usersTable");
+  };
+
+  const goToSubscribersPanel = () => {
+    setSelectedUserId(null);
+    setSelectedBillingIssue(null);
+    setActivePanel("subscribers");
+    setPendingScrollTarget("currentMenu");
+  };
+
+  const goToBillingIssuesPanel = () => {
+    setSelectedUserId(null);
+    setSelectedBillingIssue(null);
+    setActivePanel("billing_issues");
+    setPendingScrollTarget("currentMenu");
+  };
+
+  const goToRevenueOverviewPanel = () => {
+    setSelectedUserId(null);
+    setSelectedBillingIssue(null);
+    setActivePanel("revenue_overview");
+    setPendingScrollTarget("revenueCommandCenter");
+
+    if (activePanel === "revenue_overview") {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          scrollElementToTop(revenueCommandCenterRef.current, 0);
+          setPendingScrollTarget(null);
+        });
+      });
+    }
+  };
+
+  const handleSubscribersReady = () => {
+    if (pendingScrollTarget !== "currentMenu") return;
+
+    window.setTimeout(() => {
+      scrollElementToTop(currentMenuRef.current, 0);
+      setPendingScrollTarget(null);
+    }, 80);
+  };
+
+  const handleBillingIssuesReady = () => {
+    if (pendingScrollTarget !== "currentMenu") return;
+
+    window.setTimeout(() => {
+      scrollElementToTop(currentMenuRef.current, 0);
+      setPendingScrollTarget(null);
+    }, 80);
+  };
+
+  const handleRevenueOverviewReady = () => {
+    if (pendingScrollTarget !== "revenueCommandCenter") return;
+
+    window.setTimeout(() => {
+      scrollElementToTop(revenueCommandCenterRef.current, 0);
+      setPendingScrollTarget(null);
+    }, 80);
+  };
+
   const handleLogout = async () => {
     const token = localStorage.getItem("portalToken");
-
-    console.log("[Portal Dashboard] Logout clicked.");
-    console.log("[Portal Dashboard] portalToken exists?", Boolean(token));
 
     try {
       if (token) {
@@ -165,17 +290,11 @@ export default function Dashboard() {
           },
         });
 
-        let data = null;
-
         try {
-          data = await response.json();
+          await response.json();
         } catch (jsonError) {
           console.error("[Portal Dashboard] Logout JSON parse failed:", jsonError);
         }
-
-        console.log("[Portal Dashboard] Logout response status:", response.status);
-        console.log("[Portal Dashboard] Logout response ok?", response.ok);
-        console.log("[Portal Dashboard] Logout raw response data:", data);
       }
     } catch (err) {
       console.error("[Portal Dashboard] Logout request failed:", err);
@@ -183,21 +302,28 @@ export default function Dashboard() {
       localStorage.removeItem("portalToken");
       localStorage.removeItem("portalUser");
 
-      console.log("[Portal Dashboard] Portal token removed. Redirecting to login.");
-
       navigate("/login", { replace: true });
     }
   };
 
   const handleSelectPanel = (panelName) => {
     setSelectedUserId(null);
+    setSelectedBillingIssue(null);
 
     if (panelName === "overview") {
       setActivePanel("users");
+      setPendingScrollTarget("currentMenu");
+      return;
+    }
+
+    if (panelName === "revenue_overview") {
+      setActivePanel("revenue_overview");
+      setPendingScrollTarget("revenueCommandCenter");
       return;
     }
 
     setActivePanel(panelName);
+    setPendingScrollTarget("currentMenu");
   };
 
   return (
@@ -205,6 +331,7 @@ export default function Dashboard() {
       <PortalHeader
         activePanel={activePanel}
         onSelectPanel={handleSelectPanel}
+        onLogoClick={goToMainPanel}
         onLogout={handleLogout}
       />
 
@@ -216,9 +343,17 @@ export default function Dashboard() {
         totalUsers={users.length}
         displayMrrCents={displayMrrCents}
         displaySubscribers={displaySubscribers}
+        onMrrCardClick={goToRevenueOverviewPanel}
+        onSubscriptionsCardClick={goToSubscribersPanel}
+        onUsersCardClick={scrollToUsersTable}
+        onBillingIssuesCardClick={goToBillingIssuesPanel}
       />
 
-      <ActivePanelHeader activePanel={activePanel} />
+      {showActivePanelHeader ? (
+        <div ref={currentMenuRef}>
+          <ActivePanelHeader activePanel={activePanel} />
+        </div>
+      ) : null}
 
       {activePanel === "users" && selectedUserId ? (
         <EmbeddedUserDetail
@@ -232,27 +367,50 @@ export default function Dashboard() {
           users={users}
           usersLoading={usersLoading}
           usersError={usersError}
+          usersTableRef={usersTableRef}
           onSelectUser={(userId) => setSelectedUserId(userId)}
         />
       ) : null}
 
+      {activePanel === "subscribers" ? (
+        <SubscribersPanel onReady={handleSubscribersReady} />
+      ) : null}
+
+      {activePanel === "revenue_overview" ? (
+        <div ref={revenueCommandCenterRef}>
+          <RevenueOverviewPanel
+            kpis={kpis}
+            onReady={handleRevenueOverviewReady}
+          />
+        </div>
+      ) : null}
+
       {activePanel === "transactions" ? <TransactionsPanel /> : null}
 
-      {activePanel === "subscribers" ? (
-        <SimplePortalPanel
-          title="Subscribers"
-          subtitle="Subscription status table coming next."
-          body="This section is reserved for the subscriber table. It should eventually read from /v1/admin/billing/subscribers and show active, cancelled, expired, billing issue, trial, product, platform, and renewal data."
+      {activePanel === "billing_issues" && selectedBillingIssue ? (
+        <BillingIssueUserDetail
+          billingIssue={selectedBillingIssue}
+          onBack={() => setSelectedBillingIssue(null)}
         />
       ) : null}
 
-      {activePanel === "events" ? (
-        <SimplePortalPanel
-          title="Recent Events"
-          subtitle="RevenueCat webhook audit trail coming next."
-          body="This section is reserved for RevenueCat event history. It should eventually read from /v1/admin/billing/recent_events and show INITIAL_PURCHASE, RENEWAL, CANCELLATION, EXPIRATION, BILLING_ISSUE, and other webhook events."
+      {activePanel === "billing_issues" && !selectedBillingIssue ? (
+        <BillingIssuesPanel
+          onReady={handleBillingIssuesReady}
+          onSelectBillingIssue={(billingIssue) => {
+            setSelectedUserId(null);
+            setSelectedBillingIssue(billingIssue);
+          }}
         />
       ) : null}
+
+      {activePanel === "cancelled" ? <CancelledUsersPanel /> : null}
+
+      {activePanel === "expired" ? <ExpiredUsersPanel /> : null}
+
+      {activePanel === "events" ? <RecentEventsPanel /> : null}
+
+      {activePanel === "webhook_audit" ? <WebhookAuditPanel /> : null}
 
       {activePanel === "debug" ? (
         <BillingDebugPanel
@@ -265,4 +423,56 @@ export default function Dashboard() {
       ) : null}
     </div>
   );
+}
+
+function scrollElementToTop(element, offset = 0) {
+  if (!element) return;
+
+  const scrollParent = getScrollParent(element);
+
+  if (scrollParent === window) {
+    const elementTop = element.getBoundingClientRect().top + window.scrollY;
+
+    window.scrollTo({
+      top: Math.max(elementTop - offset, 0),
+      behavior: "smooth",
+    });
+
+    return;
+  }
+
+  const parentRect = scrollParent.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+
+  const nextScrollTop =
+    scrollParent.scrollTop + elementRect.top - parentRect.top - offset;
+
+  scrollParent.scrollTo({
+    top: Math.max(nextScrollTop, 0),
+    behavior: "smooth",
+  });
+}
+
+function getScrollParent(element) {
+  if (!element) return window;
+
+  let parent = element.parentElement;
+
+  while (parent) {
+    const style = window.getComputedStyle(parent);
+    const overflowY = style.overflowY;
+
+    const canScroll =
+      overflowY === "auto" ||
+      overflowY === "scroll" ||
+      overflowY === "overlay";
+
+    if (canScroll && parent.scrollHeight > parent.clientHeight) {
+      return parent;
+    }
+
+    parent = parent.parentElement;
+  }
+
+  return window;
 }

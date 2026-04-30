@@ -20,7 +20,13 @@ import {
 
 const USERS_PER_PAGE = 25;
 
-export default function UsersPanel({ users, usersLoading, usersError, onSelectUser }) {
+export default function UsersPanel({
+  users,
+  usersLoading,
+  usersError,
+  usersTableRef,
+  onSelectUser,
+}) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
@@ -108,7 +114,16 @@ export default function UsersPanel({ users, usersLoading, usersError, onSelectUs
         </div>
       </section>
 
-      <section style={cardStyle}>
+      <section
+        ref={usersTableRef}
+        style={{
+          ...cardStyle,
+
+          // This makes scrollIntoView({ block: "start" }) align nicely
+          // instead of crushing the Users table against the very top.
+          scrollMarginTop: 20,
+        }}
+      >
         <Glow color="rgba(34,211,238,0.12)" />
 
         <div
