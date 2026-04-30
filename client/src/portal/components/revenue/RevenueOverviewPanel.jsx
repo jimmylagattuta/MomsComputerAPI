@@ -15,7 +15,7 @@ const REVENUE_PAGES = {
     title: "Snapshot",
     eyebrow: "Revenue Command Center",
     subtitle:
-      "A clean high-level view of current revenue, subscriber value, and business health.",
+      "A clean high-level view of current revenue, paying subscribers, and business health.",
     emoji: "📊",
   },
   revenue_by_volume: {

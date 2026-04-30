@@ -82,12 +82,12 @@ export default function RevenueNestedMenu({
                 minHeight: 70,
                 borderRadius: 18,
                 border: isActive
-                  ? "1px solid rgba(147,197,253,0.34)"
+                  ? "1px solid rgba(103,232,249,0.65)"
                   : "1px solid rgba(255,255,255,0.08)",
                 background: isActive
-                  ? "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(168,85,247,0.13))"
+                  ? "linear-gradient(135deg, rgba(34,211,238,0.34), rgba(96,165,250,0.24) 45%, rgba(168,85,247,0.28))"
                   : "rgba(255,255,255,0.035)",
-                color: isActive ? "#bfdbfe" : "#e2e8f0",
+                color: isActive ? "#ffffff" : "#e2e8f0",
                 cursor: "pointer",
                 padding: "13px 14px",
                 display: "flex",
@@ -96,18 +96,34 @@ export default function RevenueNestedMenu({
                 gap: 10,
                 textAlign: "left",
                 boxShadow: isActive
-                  ? "0 14px 32px rgba(59,130,246,0.12)"
+                  ? "0 0 0 1px rgba(103,232,249,0.12), 0 18px 38px rgba(34,211,238,0.20), 0 10px 28px rgba(168,85,247,0.18)"
                   : "none",
                 transition:
                   "transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease",
+                position: "relative",
+                overflow: "hidden",
               }}
             >
+              {isActive ? (
+                <span
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background:
+                      "linear-gradient(90deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02), rgba(255,255,255,0.08))",
+                    pointerEvents: "none",
+                  }}
+                />
+              ) : null}
+
               <span
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
                   minWidth: 0,
+                  position: "relative",
+                  zIndex: 1,
                 }}
               >
                 <span
@@ -117,8 +133,15 @@ export default function RevenueNestedMenu({
                     borderRadius: 12,
                     display: "grid",
                     placeItems: "center",
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.07)",
+                    background: isActive
+                      ? "rgba(255,255,255,0.16)"
+                      : "rgba(255,255,255,0.06)",
+                    border: isActive
+                      ? "1px solid rgba(255,255,255,0.24)"
+                      : "1px solid rgba(255,255,255,0.07)",
+                    boxShadow: isActive
+                      ? "0 0 20px rgba(103,232,249,0.16)"
+                      : "none",
                     flexShrink: 0,
                   }}
                 >
@@ -132,6 +155,9 @@ export default function RevenueNestedMenu({
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
+                    textShadow: isActive
+                      ? "0 1px 10px rgba(0,0,0,0.22)"
+                      : "none",
                   }}
                 >
                   {item.label}
@@ -141,14 +167,40 @@ export default function RevenueNestedMenu({
               {isActive ? (
                 <span
                   style={{
-                    width: 9,
-                    height: 9,
-                    borderRadius: "50%",
-                    background: "#93c5fd",
-                    boxShadow: "0 0 16px rgba(147,197,253,0.65)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
                     flexShrink: 0,
+                    position: "relative",
+                    zIndex: 1,
                   }}
-                />
+                >
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 900,
+                      color: "#ecfeff",
+                      background: "rgba(255,255,255,0.14)",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 999,
+                      padding: "4px 8px",
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Active
+                  </span>
+
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: "#67e8f9",
+                      boxShadow: "0 0 18px rgba(103,232,249,0.9)",
+                    }}
+                  />
+                </span>
               ) : null}
             </button>
           );
