@@ -9,7 +9,7 @@ export default function UserRow({
   createdAt,
   onClick,
 }) {
-  const isActive = status === "Active";
+  const isEnabled = status === "Enabled";
 
   return (
     <>
@@ -139,11 +139,13 @@ export default function UserRow({
           style={{
             padding: "7px 12px",
             borderRadius: 999,
-            background: isActive ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.14)",
-            border: isActive
+            background: isEnabled
+              ? "rgba(34,197,94,0.14)"
+              : "rgba(239,68,68,0.14)",
+            border: isEnabled
               ? "1px solid rgba(34,197,94,0.28)"
               : "1px solid rgba(239,68,68,0.28)",
-            color: isActive ? "#86efac" : "#fca5a5",
+            color: isEnabled ? "#86efac" : "#fca5a5",
             fontSize: "0.8rem",
             fontWeight: 800,
             transition: "transform 0.24s ease",

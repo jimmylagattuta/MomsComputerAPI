@@ -15,7 +15,6 @@ import {
   formatCreatedAt,
   getDisplayName,
   getInitials,
-  normalizeStatus,
 } from "../utils/portalFormatters";
 
 const USERS_PER_PAGE = 25;
@@ -36,16 +35,19 @@ export default function UsersPanel({
       const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
       const email = user.email || "";
       const role = user.role || "";
-      const normalizedStatus =
-        String(user.status || "").toLowerCase() === "active" ? "Active" : "Inactive";
+      const accountStatus =
+        String(user.status || "").toLowerCase() === "active"
+          ? "Enabled"
+          : "Disabled";
 
       const matchesSearch =
         fullName.toLowerCase().includes(search.toLowerCase()) ||
         email.toLowerCase().includes(search.toLowerCase()) ||
-        role.toLowerCase().includes(search.toLowerCase());
+        role.toLowerCase().includes(search.toLowerCase()) ||
+        accountStatus.toLowerCase().includes(search.toLowerCase());
 
       const matchesStatus =
-        statusFilter === "All" ? true : normalizedStatus === statusFilter;
+        statusFilter === "All" ? true : accountStatus === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -96,7 +98,7 @@ export default function UsersPanel({
         >
           <input
             type="text"
-            placeholder="Search by name, email, or role..."
+            placeholder="Search by name, email, role, or account status..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={inputStyle}
@@ -107,9 +109,9 @@ export default function UsersPanel({
             onChange={(e) => setStatusFilter(e.target.value)}
             style={inputStyle}
           >
-            <option value="All">All Statuses</option>
-            <option value="Active">Active Only</option>
-            <option value="Inactive">Inactive Only</option>
+            <option value="All">All Accounts</option>
+            <option value="Enabled">Enabled Only</option>
+            <option value="Disabled">Disabled Only</option>
           </select>
         </div>
       </section>
@@ -118,9 +120,6 @@ export default function UsersPanel({
         ref={usersTableRef}
         style={{
           ...cardStyle,
-
-          // This makes scrollIntoView({ block: "start" }) align nicely
-          // instead of crushing the Users table against the very top.
           scrollMarginTop: 20,
         }}
       >
@@ -188,18 +187,25 @@ export default function UsersPanel({
           <div style={errorStateStyle}>{usersError}</div>
         ) : paginatedUsers.length > 0 ? (
           <div style={{ display: "grid", gap: 12 }}>
-            {paginatedUsers.map((user) => (
-              <UserRow
-                key={user.id}
-                initials={getInitials(user)}
-                name={getDisplayName(user)}
-                email={user.email}
-                role={user.role || "user"}
-                status={normalizeStatus(user.status)}
-                createdAt={formatCreatedAt(user.created_at)}
-                onClick={() => onSelectUser(user.id)}
-              />
-            ))}
+            {paginatedUsers.map((user) => {
+              const accountStatus =
+                String(user.status || "").toLowerCase() === "active"
+                  ? "Enabled"
+                  : "Disabled";
+
+              return (
+                <UserRow
+                  key={user.id}
+                  initials={getInitials(user)}
+                  name={getDisplayName(user)}
+                  email={user.email}
+                  role={user.role || "user"}
+                  status={accountStatus}
+                  createdAt={formatCreatedAt(user.created_at)}
+                  onClick={() => onSelectUser(user.id)}
+                />
+              );
+            })}
           </div>
         ) : (
           <div style={emptyStateStyle}>No users match your current filters.</div>
