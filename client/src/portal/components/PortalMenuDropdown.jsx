@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const PANEL_GROUPS = [
   {
@@ -74,20 +75,25 @@ const PANEL_GROUPS = [
 ];
 
 const menuButtonStyle = {
-  padding: "12px 16px",
-  borderRadius: 14,
-  border: "1px solid rgba(147,197,253,0.22)",
+  padding: "14px 18px",
+  borderRadius: 16,
+  border: "1px solid rgba(103,232,249,0.52)",
   background:
-    "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(168,85,247,0.12))",
-  color: "#dbeafe",
-  fontWeight: 900,
+    "linear-gradient(135deg, rgba(34,211,238,0.34), rgba(96,165,250,0.28), rgba(168,85,247,0.30))",
+  color: "#ffffff",
+  fontWeight: 950,
+  fontSize: "1rem",
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(0,0,0,0.20)",
+  boxShadow:
+    "0 0 0 1px rgba(103,232,249,0.12), 0 18px 44px rgba(0,0,0,0.46), 0 0 34px rgba(103,232,249,0.22)",
+  backdropFilter: "blur(16px)",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   gap: 8,
-  minWidth: 150,
+  minWidth: 170,
+  transition:
+    "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
 };
 
 const dropdownStyle = {
@@ -274,13 +280,29 @@ export default function PortalMenuDropdown({
   onLogout,
 }) {
   const [open, setOpen] = useState(false);
-  const wrapperRef = useRef(null);
+  const [isFloating, setIsFloating] = useState(false);
+  const [buttonBox, setButtonBox] = useState({
+    width: 170,
+    height: 52,
+  });
+
+  const anchorRef = useRef(null);
+  const normalWrapperRef = useRef(null);
+  const floatingWrapperRef = useRef(null);
+  const normalButtonRef = useRef(null);
 
   useEffect(() => {
     const handleDocumentClick = (event) => {
-      if (!wrapperRef.current) return;
+      const normalWrapper = normalWrapperRef.current;
+      const floatingWrapper = floatingWrapperRef.current;
 
-      if (!wrapperRef.current.contains(event.target)) {
+      const clickedNormal =
+        normalWrapper && normalWrapper.contains(event.target);
+
+      const clickedFloating =
+        floatingWrapper && floatingWrapper.contains(event.target);
+
+      if (!clickedNormal && !clickedFloating) {
         setOpen(false);
       }
     };
@@ -292,13 +314,59 @@ export default function PortalMenuDropdown({
     };
   }, []);
 
+  useEffect(() => {
+    let frameId = null;
+
+    const updateFloatingState = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        const anchor = anchorRef.current;
+        const normalButton = normalButtonRef.current;
+
+        if (normalButton) {
+          const rect = normalButton.getBoundingClientRect();
+
+          setButtonBox({
+            width: Math.ceil(rect.width || 170),
+            height: Math.ceil(rect.height || 52),
+          });
+        }
+
+        if (!anchor) return;
+
+        const anchorRect = anchor.getBoundingClientRect();
+        setIsFloating(anchorRect.top <= 86);
+      });
+    };
+
+    updateFloatingState();
+
+    document.addEventListener("scroll", updateFloatingState, true);
+    window.addEventListener("scroll", updateFloatingState, { passive: true });
+    window.addEventListener("resize", updateFloatingState);
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      document.removeEventListener("scroll", updateFloatingState, true);
+      window.removeEventListener("scroll", updateFloatingState);
+      window.removeEventListener("resize", updateFloatingState);
+    };
+  }, []);
+
   const handleSelectPanel = (panelName) => {
     onSelectPanel(panelName);
     setOpen(false);
   };
 
   const renderPanelButton = ({ panelName, label, emoji }) => {
-    const normalizedActivePanel = activePanel === "overview" ? "users" : activePanel;
+    const normalizedActivePanel =
+      activePanel === "overview" ? "users" : activePanel;
     const isActive = normalizedActivePanel === panelName;
 
     return (
@@ -322,97 +390,168 @@ export default function PortalMenuDropdown({
     );
   };
 
-  return (
-    <div ref={wrapperRef} style={{ position: "relative", zIndex: 999999 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        style={menuButtonStyle}
-      >
-        Portal Menu {open ? "▲" : "▼"}
-      </button>
+  const dropdownContent = (
+    <div style={dropdownStyle}>
+      <div style={headerStyle}>
+        <div>
+          <div style={eyebrowStyle}>Navigation</div>
+          <div style={titleStyle}>Portal Menu</div>
+        </div>
 
-      {open ? (
-        <div style={dropdownStyle}>
-          <div style={headerStyle}>
-            <div>
-              <div style={eyebrowStyle}>Navigation</div>
-              <div style={titleStyle}>Portal Menu</div>
+        <div style={hintStyle}>Admin sections</div>
+      </div>
+
+      <div
+        className="portal-menu-dropdown-force-single-column"
+        style={groupGridStyle}
+      >
+        {PANEL_GROUPS.map((group) => (
+          <div key={group.groupLabel} style={groupCardStyle}>
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "radial-gradient(circle at top right, rgba(147,197,253,0.10), transparent 44%)",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div style={groupLabelStyle}>
+              <span>{group.groupLabel}</span>
+              <span style={countPillStyle}>{group.options.length}</span>
             </div>
 
-            <div style={hintStyle}>Admin sections</div>
+            <div
+              style={{
+                position: "relative",
+                zIndex: 1,
+                display: "grid",
+                gap: 6,
+              }}
+            >
+              {group.options.map((option) => renderPanelButton(option))}
+            </div>
           </div>
+        ))}
+      </div>
 
-          <div
-            className="portal-menu-dropdown-force-single-column"
-            style={groupGridStyle}
-          >
-            {PANEL_GROUPS.map((group) => (
-              <div key={group.groupLabel} style={groupCardStyle}>
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background:
-                      "radial-gradient(circle at top right, rgba(147,197,253,0.10), transparent 44%)",
-                    pointerEvents: "none",
-                  }}
-                />
+      <div style={footerStyle}>
+        <div style={footerTextStyle}>Choose a section or sign out.</div>
 
-                <div style={groupLabelStyle}>
-                  <span>{group.groupLabel}</span>
-                  <span style={countPillStyle}>{group.options.length}</span>
-                </div>
-
-                <div
-                  style={{
-                    position: "relative",
-                    zIndex: 1,
-                    display: "grid",
-                    gap: 6,
-                  }}
-                >
-                  {group.options.map((option) => renderPanelButton(option))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={footerStyle}>
-            <div style={footerTextStyle}>Choose a section or sign out.</div>
-
-            <button type="button" onClick={onLogout} style={logoutItemStyle}>
-              🚪 Logout
-            </button>
-          </div>
-
-          <style>
-            {`
-              .portal-menu-item:hover {
-                transform: translateY(-2px);
-                background: rgba(255,255,255,0.065) !important;
-                border-color: rgba(147,197,253,0.20) !important;
-                box-shadow: 0 14px 28px rgba(0,0,0,0.22) !important;
-              }
-
-              .portal-menu-item:active {
-                transform: translateY(0);
-              }
-
-              .portal-menu-item:focus-visible {
-                outline: 2px solid rgba(147,197,253,0.72);
-                outline-offset: 3px;
-              }
-
-              @media (max-width: 720px) {
-                .portal-menu-dropdown-force-single-column {
-                  grid-template-columns: 1fr !important;
-                }
-              }
-            `}
-          </style>
-        </div>
-      ) : null}
+        <button type="button" onClick={onLogout} style={logoutItemStyle}>
+          🚪 Logout
+        </button>
+      </div>
     </div>
+  );
+
+  const renderMenuButton = (ref = null) => (
+    <button
+      ref={ref}
+      type="button"
+      onClick={() => setOpen((prev) => !prev)}
+      className="portal-menu-main-button"
+      style={menuButtonStyle}
+    >
+      Portal Menu {open ? "▲" : "▼"}
+    </button>
+  );
+
+  const floatingMenu =
+    isFloating && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={floatingWrapperRef}
+            style={{
+              position: "fixed",
+              top: 16,
+              right: 18,
+              zIndex: 999999,
+              animation: "portalMenuFloatIn 180ms ease-out",
+            }}
+          >
+            {renderMenuButton()}
+            {open ? dropdownContent : null}
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <>
+      <div
+        ref={anchorRef}
+        style={{
+          position: "relative",
+          zIndex: 999999,
+          width: isFloating ? buttonBox.width : "auto",
+          height: isFloating ? buttonBox.height : "auto",
+          minWidth: isFloating ? buttonBox.width : "auto",
+        }}
+      >
+        {!isFloating ? (
+          <div
+            ref={normalWrapperRef}
+            style={{
+              position: "relative",
+              zIndex: 999999,
+            }}
+          >
+            {renderMenuButton(normalButtonRef)}
+            {open ? dropdownContent : null}
+          </div>
+        ) : null}
+      </div>
+
+      {floatingMenu}
+
+      <style>
+        {`
+          .portal-menu-item:hover {
+            transform: translateY(-2px);
+            background: rgba(255,255,255,0.065) !important;
+            border-color: rgba(147,197,253,0.20) !important;
+            box-shadow: 0 14px 28px rgba(0,0,0,0.22) !important;
+          }
+
+          .portal-menu-item:active {
+            transform: translateY(0);
+          }
+
+          .portal-menu-main-button:hover {
+            transform: translateY(-1px);
+            box-shadow:
+              0 0 0 1px rgba(103,232,249,0.16),
+              0 22px 52px rgba(0,0,0,0.48),
+              0 0 42px rgba(103,232,249,0.24) !important;
+          }
+
+          .portal-menu-item:focus-visible,
+          .portal-menu-main-button:focus-visible {
+            outline: 2px solid rgba(147,197,253,0.72);
+            outline-offset: 3px;
+          }
+
+          @keyframes portalMenuFloatIn {
+            from {
+              opacity: 0;
+              transform: translateY(-6px) scale(0.98);
+            }
+
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+          }
+
+          @media (max-width: 720px) {
+            .portal-menu-dropdown-force-single-column {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}
+      </style>
+    </>
   );
 }

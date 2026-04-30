@@ -112,3 +112,22 @@ export const backButtonStyle = {
   fontWeight: 800,
   cursor: "pointer",
 };
+
+export const glowingMenuPillStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  padding: "10px 14px",
+  borderRadius: 999,
+  border: "1px solid rgba(103,232,249,0.48)",
+  background:
+    "linear-gradient(135deg, rgba(34,211,238,0.28), rgba(96,165,250,0.22), rgba(168,85,247,0.24))",
+  color: "#ffffff",
+  fontWeight: 900,
+  fontSize: "0.82rem",
+  letterSpacing: "0.01em",
+  boxShadow:
+    "0 0 0 1px rgba(103,232,249,0.10), 0 12px 30px rgba(0,0,0,0.30), 0 0 24px rgba(103,232,249,0.16)",
+  backdropFilter: "blur(14px)",
+};

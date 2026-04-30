@@ -36,7 +36,8 @@ const PANEL_LABELS = {
   revenue_by_platform: {
     eyebrow: "Current Menu",
     title: "Revenue by Platform",
-    subtitle: "Compare App Store, Play Store, and platform-specific revenue totals.",
+    subtitle:
+      "Compare App Store, Play Store, and platform-specific revenue totals.",
     emoji: "📱",
   },
   revenue_by_product: {
@@ -54,7 +55,8 @@ const PANEL_LABELS = {
   billing_issues: {
     eyebrow: "Current Menu",
     title: "Billing Issues",
-    subtitle: "Find users with failed renewals, payment problems, or billing-risk status.",
+    subtitle:
+      "Find users with failed renewals, payment problems, or billing-risk status.",
     emoji: "⚠️",
   },
   cancelled: {
@@ -73,13 +75,15 @@ const PANEL_LABELS = {
   trials: {
     eyebrow: "Current Menu",
     title: "Trials",
-    subtitle: "Review trial users, trial windows, and trial-to-paid conversion signals.",
+    subtitle:
+      "Review trial users, trial windows, and trial-to-paid conversion signals.",
     emoji: "🧪",
   },
   events: {
     eyebrow: "Current Menu",
     title: "Recent Events",
-    subtitle: "Audit RevenueCat webhook events and subscription lifecycle activity.",
+    subtitle:
+      "Audit RevenueCat webhook events and subscription lifecycle activity.",
     emoji: "⚡",
   },
   webhook_audit: {
@@ -103,47 +107,100 @@ const PANEL_LABELS = {
   },
 };
 
+const glowingMenuCardStyle = {
+  ...cardStyle,
+  padding: "20px 22px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  flexWrap: "wrap",
+  position: "relative",
+  overflow: "hidden",
+  border: "1px solid rgba(103,232,249,0.38)",
+  background:
+    "radial-gradient(circle at top left, rgba(34,211,238,0.24), transparent 26%), radial-gradient(circle at top right, rgba(168,85,247,0.22), transparent 30%), linear-gradient(135deg, rgba(15,23,42,0.96), rgba(30,41,59,0.78), rgba(49,46,129,0.56))",
+  boxShadow:
+    "0 0 0 1px rgba(103,232,249,0.10), 0 20px 48px rgba(0,0,0,0.36), 0 0 38px rgba(103,232,249,0.16), inset 0 1px 0 rgba(255,255,255,0.06)",
+};
+
+const currentMenuGlowStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  padding: "10px 16px",
+  borderRadius: 16,
+  border: "1px solid rgba(103,232,249,0.52)",
+  background:
+    "linear-gradient(135deg, rgba(34,211,238,0.34), rgba(96,165,250,0.28), rgba(168,85,247,0.30))",
+  color: "#ffffff",
+  fontWeight: 950,
+  fontSize: "0.84rem",
+  letterSpacing: "0.01em",
+  boxShadow:
+    "0 0 0 1px rgba(103,232,249,0.12), 0 18px 44px rgba(0,0,0,0.46), 0 0 34px rgba(103,232,249,0.22)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  marginBottom: 12,
+  textShadow: "0 1px 8px rgba(255,255,255,0.12)",
+};
+
+const softGlowOrbStyle = {
+  position: "absolute",
+  right: -80,
+  top: -80,
+  width: 220,
+  height: 220,
+  borderRadius: "50%",
+  background: "rgba(103,232,249,0.12)",
+  filter: "blur(4px)",
+  pointerEvents: "none",
+};
+
+const purpleGlowOrbStyle = {
+  position: "absolute",
+  left: "42%",
+  bottom: -120,
+  width: 260,
+  height: 260,
+  borderRadius: "50%",
+  background: "rgba(168,85,247,0.12)",
+  filter: "blur(5px)",
+  pointerEvents: "none",
+};
+
 export default function ActivePanelHeader({ activePanel }) {
   const panel = useMemo(() => {
     return PANEL_LABELS[activePanel] || PANEL_LABELS.users;
   }, [activePanel]);
 
   return (
-    <section
-      style={{
-        ...cardStyle,
-        padding: "18px 20px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 14,
-        flexWrap: "wrap",
-      }}
-    >
-      <div>
-        <div
+    <section style={glowingMenuCardStyle}>
+      <div style={softGlowOrbStyle} />
+      <div style={purpleGlowOrbStyle} />
+
+      <div style={{ position: "relative", zIndex: 1 }}>
+        <div style={currentMenuGlowStyle}>{panel.eyebrow}</div>
+
+        <h2
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 11px",
-            borderRadius: 999,
-            background: "rgba(59,130,246,0.12)",
-            border: "1px solid rgba(147,197,253,0.18)",
-            color: "#bfdbfe",
-            fontSize: "0.78rem",
-            fontWeight: 900,
-            marginBottom: 10,
+            ...sectionTitleStyle,
+            color: "#ffffff",
+            textShadow: "0 0 18px rgba(103,232,249,0.14)",
           }}
         >
-          {panel.eyebrow}
-        </div>
-
-        <h2 style={sectionTitleStyle}>
           {panel.emoji} {panel.title}
         </h2>
 
-        <p style={sectionSubtextStyle}>{panel.subtitle}</p>
+        <p
+          style={{
+            ...sectionSubtextStyle,
+            color: "#dbeafe",
+          }}
+        >
+          {panel.subtitle}
+        </p>
       </div>
     </section>
   );
