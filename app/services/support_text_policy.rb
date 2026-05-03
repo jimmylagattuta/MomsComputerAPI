@@ -55,10 +55,18 @@ class SupportTextPolicy
   end
 
   def daily_image_limit_hit?
+    return false if image_count <= 0
+
     used_today =
-      outbound_scope
+      ActiveStorage::Attachment
+        .joins(
+          "INNER JOIN support_text_messages " \
+          "ON support_text_messages.id = active_storage_attachments.record_id"
+        )
+        .where(record_type: "SupportTextMessage", name: "images")
+        .where("support_text_messages.user_id = ?", user.id)
+        .where("support_text_messages.direction = ?", "outbound_to_support")
         .where("support_text_messages.created_at >= ?", 24.hours.ago)
-        .joins("LEFT JOIN active_storage_attachments asa ON asa.record_type = 'SupportTextMessage' AND asa.record_id = support_text_messages.id")
         .count
 
     (used_today + image_count) > DAILY_IMAGE_LIMIT
