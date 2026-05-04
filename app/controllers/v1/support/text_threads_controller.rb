@@ -16,7 +16,7 @@ class V1::Support::TextThreadsController < ApplicationController
   def show
     thread = SupportTextThread.find(params[:id])
 
-    thread.update!(support_unread: 0)
+    thread.update!(support_unread: false)
 
     render json: {
       thread: serialize_thread(thread.reload)
