@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_04_28_232312) do
+ActiveRecord::Schema[7.2].define(version: 2026_05_23_010128) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -198,6 +198,22 @@ ActiveRecord::Schema[7.2].define(version: 2026_04_28_232312) do
     t.datetime "expires_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "ringcentral_webhook_events", force: :cascade do |t|
+    t.string "event_type"
+    t.string "telephony_session_id"
+    t.string "party_id"
+    t.string "direction"
+    t.string "status"
+    t.string "caller_phone"
+    t.json "raw_payload", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["caller_phone"], name: "index_ringcentral_webhook_events_on_caller_phone"
+    t.index ["party_id"], name: "index_ringcentral_webhook_events_on_party_id"
+    t.index ["status"], name: "index_ringcentral_webhook_events_on_status"
+    t.index ["telephony_session_id"], name: "index_ringcentral_webhook_events_on_telephony_session_id"
   end
 
   create_table "subscription_transactions", force: :cascade do |t|

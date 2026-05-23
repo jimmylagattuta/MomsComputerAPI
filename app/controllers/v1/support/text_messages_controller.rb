@@ -8,12 +8,37 @@ class V1::Support::TextMessagesController < ApplicationController
   def index
     thread = SupportTextThread.find(params[:text_thread_id])
 
+    Rails.logger.info(
+      "[TextMomAdminBadge] messages#index before read " \
+      "agent_id=#{current_user.id} " \
+      "role=#{current_user.role} " \
+      "thread_id=#{thread.id} " \
+      "thread_user_id=#{thread.user_id} " \
+      "user_unread=#{thread.user_unread.inspect} " \
+      "support_unread=#{thread.support_unread.inspect}"
+    )
+
+    mark_thread_read_for_support!(thread)
+
+    thread.reload
+
+    Rails.logger.info(
+      "[TextMomAdminBadge] messages#index after read " \
+      "agent_id=#{current_user.id} " \
+      "role=#{current_user.role} " \
+      "thread_id=#{thread.id} " \
+      "thread_user_id=#{thread.user_id} " \
+      "user_unread=#{thread.user_unread.inspect} " \
+      "support_unread=#{thread.support_unread.inspect}"
+    )
+
     messages = thread.support_text_messages
                      .chronological
                      .includes(images_attachments: :blob)
 
     render json: {
-      messages: messages.map { |message| serialize_message(message) }
+      messages: messages.map { |message| serialize_message(message) },
+      thread: serialize_thread_summary(thread)
     }, status: :ok
   rescue ActiveRecord::RecordNotFound
     render json: { error: "Support thread not found." }, status: :not_found
@@ -42,17 +67,6 @@ class V1::Support::TextMessagesController < ApplicationController
         .join(" ")
         .presence || current_user.email
 
-    # Rails.logger.info("======== SUPPORT TEXT ADMIN CREATE ========")
-    # Rails.logger.info("RAW PARAMS: #{params.to_unsafe_h.except(:images).inspect}")
-    # Rails.logger.info("THREAD ID: #{thread.id}")
-    # Rails.logger.info("ADMIN USER ID: #{current_user.id}")
-    # Rails.logger.info("ADMIN USER NAME: #{admin_display_name}")
-    # Rails.logger.info("BODY: #{cleaned_body.inspect}")
-    # Rails.logger.info("SIGNED IDS COUNT: #{cleaned_image_signed_ids.length}")
-    # Rails.logger.info("UPLOADED IMAGES COUNT: #{uploaded_images.length}")
-    # Rails.logger.info("UPLOADED IMAGES CLASS: #{uploaded_images.map(&:class).inspect}")
-    # Rails.logger.info("===========================================")
-
     if cleaned_body.blank? && cleaned_image_signed_ids.blank? && uploaded_images.blank?
       return render json: { error: "Message content is required." }, status: :unprocessable_entity
     end
@@ -68,7 +82,6 @@ class V1::Support::TextMessagesController < ApplicationController
       author_agent_name: admin_display_name
     )
 
-    # Rails.logger.info("Admin support message: saving without validation before attaching images")
     message.save!(validate: false)
 
     attach_signed_images!(message, cleaned_image_signed_ids) if cleaned_image_signed_ids.present?
@@ -113,6 +126,16 @@ class V1::Support::TextMessagesController < ApplicationController
       )
     end
 
+    Rails.logger.info(
+      "[TextMomAdminBadge] messages#create support sent " \
+      "agent_id=#{current_user.id} " \
+      "role=#{current_user.role} " \
+      "thread_id=#{thread.id} " \
+      "thread_user_id=#{thread.user_id} " \
+      "user_unread=#{thread.reload.user_unread.inspect} " \
+      "support_unread=#{thread.support_unread.inspect}"
+    )
+
     SupportTextNotificationService.notify_new_message!(message)
 
     render json: {
@@ -148,9 +171,15 @@ class V1::Support::TextMessagesController < ApplicationController
   private
 
   def require_admin!
-    return if current_user&.role == "admin"
+    return if current_user&.role == "admin" || current_user&.role == "super_admin"
 
     render json: { error: "Forbidden" }, status: :forbidden
+  end
+
+  def mark_thread_read_for_support!(thread)
+    return unless thread.support_unread == true
+
+    thread.update!(support_unread: false)
   end
 
   def attach_signed_images!(message, signed_ids)
@@ -257,8 +286,9 @@ class V1::Support::TextMessagesController < ApplicationController
       id: thread.id,
       status: thread.status,
       priority: thread.priority,
-      support_unread: thread.support_unread,
-      user_unread: thread.user_unread,
+      support_unread: thread.support_unread == true,
+      user_unread: thread.user_unread == true,
+      text_mom_unread_count: thread.support_unread == true ? 1 : 0,
       assigned_agent_id: thread.assigned_agent_id,
       assigned_agent_name: thread.assigned_agent_name,
       started_at: thread.started_at,

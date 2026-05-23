@@ -81,6 +81,8 @@ Rails.application.routes.draw do
     post "twilio_webhooks/call_status",    to: "twilio_webhooks#call_status"
     post "twilio_webhooks/message_status", to: "twilio_webhooks#message_status"
 
+    post "ringcentral/webhook", to: "ringcentral_webhooks#create"
+
     post "ask_mom", to: "ask_mom#create"
 
     resources :conversations, only: [:index, :show]

@@ -1,0 +1,2 @@
+class RingcentralWebhookEvent < ApplicationRecord
+end

@@ -8,8 +8,18 @@ class ExpoPushService
   MAX_BATCH_SIZE = 100
 
   class << self
-    def send_to_tokens!(tokens:, title:, body:, data: {}, sound: "default", priority: "high", channel_id: nil)
+    def send_to_tokens!(
+      tokens:,
+      title:,
+      body:,
+      data: {},
+      sound: "default",
+      priority: "high",
+      channel_id: nil,
+      badge: nil
+    )
       cleaned_tokens = normalize_tokens(tokens)
+      normalized_badge = normalize_badge_count(badge)
 
       if cleaned_tokens.empty?
         Rails.logger.info("[ExpoPushService] No valid Expo push tokens to send.")
@@ -35,6 +45,12 @@ class ExpoPushService
           }
 
           payload[:channelId] = channel_id if channel_id.present?
+
+          # ✅ App icon badge number.
+          # iOS applies this directly.
+          # Android support depends on device/launcher, but Expo still passes it through.
+          payload[:badge] = normalized_badge unless normalized_badge.nil?
+
           payload
         end
 
@@ -46,6 +62,7 @@ class ExpoPushService
         skipped: false,
         token_count: cleaned_tokens.size,
         batch_count: responses.size,
+        badge: normalized_badge,
         responses: responses
       }
     rescue => e
@@ -78,6 +95,13 @@ class ExpoPushService
 
     private
 
+    def normalize_badge_count(value)
+      return nil if value.nil?
+
+      count = value.to_i
+      count.negative? ? 0 : count
+    end
+
     def post_messages(messages)
       uri = URI.parse(EXPO_PUSH_URL)
       http = Net::HTTP.new(uri.host, uri.port)
@@ -90,7 +114,9 @@ class ExpoPushService
       request["Accept"] = "application/json"
       request.body = messages.to_json
 
-      Rails.logger.info("[ExpoPushService] Sending #{messages.size} push notification(s) to Expo.")
+      Rails.logger.info(
+        "[ExpoPushService] Sending #{messages.size} push notification(s) to Expo."
+      )
 
       response = http.request(request)
       parsed_body = parse_json(response.body)
@@ -113,6 +139,7 @@ class ExpoPushService
 
     def truncate_for_logs(value, max_length = 1500)
       return value if value.length <= max_length
+
       "#{value[0...max_length]}...[truncated]"
     end
   end
