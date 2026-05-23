@@ -4,7 +4,7 @@ require "ringcentral"
 
 module Ringcentral
   class CreateTelephonySubscription
-    WEBHOOK_URL = "https://moms-computer-api.herokuapp.com/v1/ringcentral/webhook"
+    WEBHOOK_URL = "https://moms-computer-api-7821d4d85418.herokuapp.com/v1/ringcentral/webhook"
 
     EVENT_FILTERS = [
       "/restapi/v1.0/account/~/extension/~/telephony/sessions"
