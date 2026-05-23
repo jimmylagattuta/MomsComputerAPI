@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_05_23_023842) do
+ActiveRecord::Schema[7.2].define(version: 2026_05_23_024523) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -320,8 +320,23 @@ ActiveRecord::Schema[7.2].define(version: 2026_05_23_023842) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "buffer_expires_at"
+    t.string "ringcentral_telephony_session_id"
+    t.string "ringcentral_party_id"
+    t.string "ringcentral_status"
+    t.string "caller_phone"
+    t.string "to_phone"
+    t.string "ringcentral_extension_id"
+    t.string "ringcentral_to_name"
+    t.string "forwarded_to"
+    t.string "blocked_reason"
+    t.json "ringcentral_raw_payload", default: {}, null: false
+    t.index ["blocked_reason"], name: "index_support_call_sessions_on_blocked_reason"
     t.index ["buffer_expires_at"], name: "index_support_call_sessions_on_buffer_expires_at"
+    t.index ["caller_phone"], name: "index_support_call_sessions_on_caller_phone"
     t.index ["chargeable"], name: "index_support_call_sessions_on_chargeable"
+    t.index ["ringcentral_party_id"], name: "index_support_call_sessions_on_ringcentral_party_id"
+    t.index ["ringcentral_telephony_session_id", "ringcentral_party_id"], name: "index_support_calls_on_rc_session_and_party", unique: true
+    t.index ["ringcentral_telephony_session_id"], name: "idx_on_ringcentral_telephony_session_id_2b450f29e4"
     t.index ["status"], name: "index_support_call_sessions_on_status"
     t.index ["support_call_cycle_id"], name: "index_support_call_sessions_on_support_call_cycle_id"
     t.index ["twilio_call_sid"], name: "index_support_call_sessions_on_twilio_call_sid", unique: true

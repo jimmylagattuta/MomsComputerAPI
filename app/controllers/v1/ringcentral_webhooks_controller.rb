@@ -32,6 +32,8 @@ class V1::RingcentralWebhooksController < ApplicationController
       raw_payload: payload
     )
 
+    Ringcentral::ProcessInboundCallEvent.call(event)
+
     render json: {
       ok: true,
       message: "RingCentral webhook received",
