@@ -26,28 +26,28 @@ module Ringcentral
         return skip!("duplicate_already_has_session")
       end
 
-      user = User.find_by(phone: event.caller_phone)
+      user = find_user_by_phone(event.caller_phone)
 
+      # Important business rule:
+      # Unknown callers are public office callers, not app users.
+      # Let RingCentral's normal office routing continue.
       unless user.present?
-        create_blocked_session!(nil, nil, "unknown_phone")
-        return processed!("blocked_unknown_phone")
+        return passthrough_without_session!("unknown_phone")
       end
 
+      # Known app user, but not allowed to use app-based call access.
       unless user.status == "active"
-        create_blocked_session!(user, nil, "inactive_user")
-        return processed!("blocked_inactive_user")
+        return blocked_without_session!("inactive_user")
       end
 
       unless user.phone_verified_at.present?
-        create_blocked_session!(user, nil, "phone_not_verified")
-        return processed!("blocked_phone_not_verified")
+        return blocked_without_session!("phone_not_verified")
       end
 
       cycle = current_call_cycle_for(user)
 
       unless cycle.present?
-        create_blocked_session!(user, nil, "no_current_call_cycle")
-        return processed!("blocked_no_current_call_cycle")
+        return blocked_without_session!("no_current_call_cycle")
       end
 
       unless cycle.calls_used < cycle.calls_allowed
@@ -55,8 +55,8 @@ module Ringcentral
         return processed!("blocked_no_calls_remaining")
       end
 
-      create_allowed_session!(user, cycle)
-      processed!("allowed_pending_forward")
+      create_allowed_passthrough_session!(user, cycle)
+      processed!("allowed_passthrough_known_user")
     rescue => e
       Rails.logger.error("[RingCentral Processor] FAILED event_id=#{event.id} #{e.class}: #{e.message}")
       Rails.logger.error(e.backtrace.first(10).join("\n"))
@@ -74,6 +74,10 @@ module Ringcentral
 
     attr_reader :event
 
+    def find_user_by_phone(phone)
+      User.find_by(phone: phone)
+    end
+
     def current_call_cycle_for(user)
       user.support_call_cycles
         .where("cycle_start_at <= ? AND cycle_end_at >= ?", Time.current, Time.current)
@@ -81,11 +85,11 @@ module Ringcentral
         .first
     end
 
-    def create_allowed_session!(user, cycle)
+    def create_allowed_passthrough_session!(user, cycle)
       SupportCallSession.create!(
         user: user,
         support_call_cycle: cycle,
-        status: "allowed_pending_forward",
+        status: "allowed_passthrough",
         started_at: Time.current,
         chargeable: false,
         ringcentral_telephony_session_id: event.telephony_session_id,
@@ -116,6 +120,36 @@ module Ringcentral
         ringcentral_to_name: event.to_name,
         ringcentral_raw_payload: event.raw_payload
       )
+    end
+
+    def passthrough_without_session!(reason)
+      event.update!(
+        processed: true,
+        processed_at: Time.current,
+        processing_result: "passthrough_#{reason}"
+      )
+
+      Rails.logger.info(
+        "[RingCentral Processor] passthrough_without_session " \
+        "event_id=#{event.id} reason=#{reason} caller_phone=#{event.caller_phone}"
+      )
+
+      true
+    end
+
+    def blocked_without_session!(reason)
+      event.update!(
+        processed: true,
+        processed_at: Time.current,
+        processing_result: "blocked_#{reason}"
+      )
+
+      Rails.logger.info(
+        "[RingCentral Processor] blocked_without_session " \
+        "event_id=#{event.id} reason=#{reason} caller_phone=#{event.caller_phone}"
+      )
+
+      true
     end
 
     def processed!(result)

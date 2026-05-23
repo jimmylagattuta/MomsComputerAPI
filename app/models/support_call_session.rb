@@ -12,10 +12,20 @@ class SupportCallSession < ApplicationRecord
     no_answer
     failed
     canceled
+    allowed_pending_forward
+    allowed_passthrough
+    forwarded
+    blocked
   ].freeze
 
   validates :status, inclusion: { in: STATUSES }, allow_nil: true
   validates :twilio_call_sid, uniqueness: true, allow_nil: true
+
+  validates :ringcentral_telephony_session_id,
+            uniqueness: {
+              scope: :ringcentral_party_id,
+              allow_nil: true
+            }
 
   scope :chargeable, -> { where(chargeable: true) }
   scope :not_chargeable, -> { where(chargeable: false) }
