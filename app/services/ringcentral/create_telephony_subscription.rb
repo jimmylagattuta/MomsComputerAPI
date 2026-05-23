@@ -1,7 +1,6 @@
 # app/services/ringcentral/create_telephony_subscription.rb
 
 require "ringcentral"
-require "securerandom"
 
 module Ringcentral
   class CreateTelephonySubscription
@@ -21,9 +20,6 @@ module Ringcentral
       server_url = ENV.fetch("RINGCENTRAL_SERVER_URL")
       jwt = ENV.fetch("RINGCENTRAL_JWT")
 
-      validation_token = ENV["RINGCENTRAL_WEBHOOK_VALIDATION_TOKEN"].presence ||
-        SecureRandom.hex(24)
-
       Rails.logger.info("[RingCentral Subscription] Starting...")
       Rails.logger.info("[RingCentral Subscription] Webhook URL: #{WEBHOOK_URL}")
       Rails.logger.info("[RingCentral Subscription] Event filters: #{EVENT_FILTERS.inspect}")
@@ -37,8 +33,7 @@ module Ringcentral
         eventFilters: EVENT_FILTERS,
         deliveryMode: {
           transportType: "WebHook",
-          address: WEBHOOK_URL,
-          verificationToken: validation_token
+          address: WEBHOOK_URL
         }
       }
 
