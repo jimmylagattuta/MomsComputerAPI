@@ -7,7 +7,7 @@ module Ringcentral
     WEBHOOK_URL = "https://moms-computer-api-7821d4d85418.herokuapp.com/v1/ringcentral/webhook"
 
     EVENT_FILTERS = [
-      "/restapi/v1.0/account/~/extension/~/telephony/sessions"
+      "/restapi/v1.0/account/~/telephony/sessions"
     ].freeze
 
     def self.call
