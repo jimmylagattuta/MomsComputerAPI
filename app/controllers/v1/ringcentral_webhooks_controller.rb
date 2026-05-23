@@ -15,21 +15,27 @@ class V1::RingcentralWebhooksController < ApplicationController
     Rails.logger.info "Validation Token: #{validation_token}"
     Rails.logger.info "Headers: #{filtered_headers}"
     Rails.logger.info "Payload: #{payload}"
+    Rails.logger.info "Inbound Party: #{inbound_party(payload)}"
     Rails.logger.info "=============================="
 
-    RingcentralWebhookEvent.create!(
+    event = RingcentralWebhookEvent.create!(
       event_type: extract_event_type(payload),
       telephony_session_id: extract_telephony_session_id(payload),
       party_id: extract_party_id(payload),
       direction: extract_direction(payload),
       status: extract_status(payload),
       caller_phone: extract_caller_phone(payload),
+      to_phone: extract_to_phone(payload),
+      extension_id: extract_extension_id(payload),
+      to_name: extract_to_name(payload),
+      processed: false,
       raw_payload: payload
     )
 
     render json: {
       ok: true,
-      message: "RingCentral webhook received"
+      message: "RingCentral webhook received",
+      event_id: event.id
     }, status: :ok
   rescue => e
     Rails.logger.error "=============================="
@@ -68,6 +74,15 @@ class V1::RingcentralWebhooksController < ApplicationController
     end
   end
 
+  def inbound_party(payload)
+    parties = payload.dig("body", "parties") || []
+
+    parties.find do |party|
+      party["direction"] == "Inbound" &&
+        party.dig("from", "phoneNumber").present?
+    end || parties.first
+  end
+
   def extract_event_type(payload)
     payload["event"] ||
       payload["eventType"] ||
@@ -83,30 +98,67 @@ class V1::RingcentralWebhooksController < ApplicationController
   end
 
   def extract_party_id(payload)
-    payload.dig("body", "parties", 0, "id") ||
+    party = inbound_party(payload)
+
+    party&.dig("id") ||
       payload.dig("body", "partyId") ||
       payload["partyId"]
   end
 
   def extract_direction(payload)
-    payload.dig("body", "parties", 0, "direction") ||
+    party = inbound_party(payload)
+
+    party&.dig("direction") ||
       payload.dig("body", "direction") ||
       payload["direction"]
   end
 
   def extract_status(payload)
-    payload.dig("body", "parties", 0, "status", "code") ||
-      payload.dig("body", "parties", 0, "status") ||
+    party = inbound_party(payload)
+
+    party&.dig("status", "code") ||
+      party&.dig("status") ||
       payload.dig("body", "status", "code") ||
       payload.dig("body", "status") ||
       payload["status"]
   end
 
   def extract_caller_phone(payload)
-    payload.dig("body", "parties", 0, "from", "phoneNumber") ||
+    party = inbound_party(payload)
+
+    party&.dig("from", "phoneNumber") ||
       payload.dig("body", "from", "phoneNumber") ||
       payload.dig("body", "caller", "phoneNumber") ||
       payload["caller_phone"] ||
       payload["callerPhone"]
+  end
+
+  def extract_to_phone(payload)
+    party = inbound_party(payload)
+
+    party&.dig("to", "phoneNumber") ||
+      payload.dig("body", "to", "phoneNumber") ||
+      payload["to_phone"] ||
+      payload["toPhone"]
+  end
+
+  def extract_extension_id(payload)
+    party = inbound_party(payload)
+
+    party&.dig("extensionId") ||
+      party&.dig("to", "extensionId") ||
+      payload.dig("body", "extensionId") ||
+      payload.dig("body", "to", "extensionId") ||
+      payload["extension_id"] ||
+      payload["extensionId"]
+  end
+
+  def extract_to_name(payload)
+    party = inbound_party(payload)
+
+    party&.dig("to", "name") ||
+      payload.dig("body", "to", "name") ||
+      payload["to_name"] ||
+      payload["toName"]
   end
 end
