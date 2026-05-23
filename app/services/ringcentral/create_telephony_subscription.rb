@@ -29,18 +29,25 @@ module Ringcentral
       Rails.logger.info("[RingCentral Subscription] Event filters: #{EVENT_FILTERS.inspect}")
 
       rc = RingCentral.new(client_id, client_secret, server_url)
+
+      Rails.logger.info("[RingCentral Subscription] Authorizing with JWT...")
       rc.authorize(jwt: jwt)
+
+      subscription_payload = {
+        eventFilters: EVENT_FILTERS,
+        deliveryMode: {
+          transportType: "WebHook",
+          address: WEBHOOK_URL,
+          verificationToken: validation_token
+        }
+      }
+
+      Rails.logger.info("[RingCentral Subscription] Creating subscription...")
+      Rails.logger.info("[RingCentral Subscription] Payload: #{subscription_payload.inspect}")
 
       response = rc.post(
         "/restapi/v1.0/subscription",
-        {
-          eventFilters: EVENT_FILTERS,
-          deliveryMode: {
-            transportType: "WebHook",
-            address: WEBHOOK_URL,
-            verificationToken: validation_token
-          }
-        }
+        payload: subscription_payload
       )
 
       body = response.body
