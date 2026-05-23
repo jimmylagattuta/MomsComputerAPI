@@ -14,12 +14,24 @@ module Ringcentral
       server_url = ENV.fetch("RINGCENTRAL_SERVER_URL")
       jwt = ENV.fetch("RINGCENTRAL_JWT")
 
-      platform = RingCentral.new(client_id, client_secret, server_url)
+      puts "[RingCentral AuthTest] Starting auth test..."
+      puts "[RingCentral AuthTest] Server URL: #{server_url}"
+      puts "[RingCentral AuthTest] Client ID present?: #{client_id.present?}"
+      puts "[RingCentral AuthTest] Client Secret present?: #{client_secret.present?}"
+      puts "[RingCentral AuthTest] JWT present?: #{jwt.present?}"
 
-      platform.authorize(jwt: jwt)
+      rc = RingCentral.new(client_id, client_secret, server_url)
 
-      extension_response = platform.get("/restapi/v1.0/account/~/extension/~")
-      extension_data = JSON.parse(extension_response.body)
+      puts "[RingCentral AuthTest] Authorizing with JWT..."
+      rc.authorize(jwt: jwt)
+
+      puts "[RingCentral AuthTest] Authorized. Fetching extension..."
+      response = rc.get("/restapi/v1.0/account/~/extension/~")
+
+      extension_data = response.body
+
+      puts "[RingCentral AuthTest] Extension response class: #{extension_data.class}"
+      puts "[RingCentral AuthTest] Extension response: #{extension_data.inspect}"
 
       {
         success: true,
@@ -29,6 +41,10 @@ module Ringcentral
         status: extension_data["status"]
       }
     rescue StandardError => e
+      puts "[RingCentral AuthTest] FAILED"
+      puts "[RingCentral AuthTest] #{e.class.name}: #{e.message}"
+      puts e.backtrace.first(10)
+
       {
         success: false,
         error_class: e.class.name,
