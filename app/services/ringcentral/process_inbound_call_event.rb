@@ -50,32 +50,32 @@ module Ringcentral
       end
 
       unless user.status == "active"
-        reject_result = reject_call!
-        return blocked_without_session!("inactive_user", reject_result)
+        enforcement_result = enforce_blocked_call!
+        return blocked_without_session!("inactive_user", enforcement_result)
       end
 
       unless user.phone_verified_at.present?
-        reject_result = reject_call!
-        return blocked_without_session!("phone_not_verified", reject_result)
+        enforcement_result = enforce_blocked_call!
+        return blocked_without_session!("phone_not_verified", enforcement_result)
       end
 
       cycle = current_call_cycle_for(user)
 
       unless cycle.present?
-        reject_result = reject_call!
-        return blocked_without_session!("no_current_call_cycle", reject_result)
+        enforcement_result = enforce_blocked_call!
+        return blocked_without_session!("no_current_call_cycle", enforcement_result)
       end
 
       unless cycle.calls_used < cycle.calls_allowed
         session = create_blocked_session!(user, cycle, "no_calls_remaining")
-        reject_result = reject_call!
+        enforcement_result = enforce_blocked_call!
 
         session.update!(
-          failure_reason: reject_result[:success] ? "ringcentral_reject_success" : "ringcentral_reject_failed"
+          failure_reason: enforcement_result[:success] ? "ringcentral_enforcement_success" : "ringcentral_enforcement_failed"
         )
 
         return processed!(
-          reject_result[:success] ? "blocked_no_calls_remaining_rejected" : "blocked_no_calls_remaining_reject_failed"
+          enforcement_result[:success] ? "blocked_no_calls_remaining_enforced" : "blocked_no_calls_remaining_enforcement_failed"
         )
       end
 
@@ -189,8 +189,25 @@ module Ringcentral
       )
     end
 
-    def reject_call!
-      Ringcentral::RejectCallParty.call(event)
+    def enforce_blocked_call!
+      drop_result = Ringcentral::DropCallSession.call(event)
+
+      return drop_result if drop_result[:success]
+
+      Rails.logger.info(
+        "[RingCentral Processor] drop_call_session failed; trying reject_call_party " \
+        "event_id=#{event.id} drop_result=#{drop_result.inspect}"
+      )
+
+      reject_result = Ringcentral::RejectCallParty.call(event)
+
+      {
+        success: reject_result[:success],
+        primary_action: "drop_call_session",
+        fallback_action: "reject_call_party",
+        drop_result: drop_result,
+        reject_result: reject_result
+      }
     end
 
     def passthrough_without_session!(reason)
@@ -208,14 +225,14 @@ module Ringcentral
       true
     end
 
-    def blocked_without_session!(reason, reject_result = nil)
+    def blocked_without_session!(reason, enforcement_result = nil)
       suffix =
-        if reject_result.nil?
+        if enforcement_result.nil?
           nil
-        elsif reject_result[:success]
-          "rejected"
+        elsif enforcement_result[:success]
+          "enforced"
         else
-          "reject_failed"
+          "enforcement_failed"
         end
 
       result = ["blocked_#{reason}", suffix].compact.join("_")
@@ -230,7 +247,7 @@ module Ringcentral
         "[RingCentral Processor] blocked_without_session " \
         "event_id=#{event.id} reason=#{reason} " \
         "caller_phone=#{event.caller_phone} " \
-        "reject_result=#{reject_result.inspect}"
+        "enforcement_result=#{enforcement_result.inspect}"
       )
 
       true
