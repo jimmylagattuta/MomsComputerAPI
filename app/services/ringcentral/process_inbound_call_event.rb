@@ -139,6 +139,10 @@ module Ringcentral
     end
 
     def handle_answered_event!
+      # Important:
+      # RingCentral can send Outbound / Answered when the call reaches the queue/buffer,
+      # even if no human support person answered. Do not charge those events.
+      return skip!("answered_not_inbound") unless event.direction == "Inbound"
       return skip!("answered_missing_telephony_session_id") if event.telephony_session_id.blank?
 
       session = SupportCallSession
