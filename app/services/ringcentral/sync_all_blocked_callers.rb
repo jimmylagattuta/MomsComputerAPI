@@ -92,6 +92,7 @@ module Ringcentral
         calls_allowed: cycle.calls_allowed,
         calls_used: cycle.calls_used,
         calls_remaining: cycle.calls_remaining,
+        active_reconnect_buffer: active_reconnect_buffer?(user),
         ringcentral_success: result[:success],
         ringcentral_result: result
       }
@@ -102,6 +103,7 @@ module Ringcentral
         "[RingCentral Sync All Blocked Callers] Synced user_id=#{user.id} " \
         "phone=#{user.phone} calls_used=#{cycle.calls_used} " \
         "calls_allowed=#{cycle.calls_allowed} calls_remaining=#{cycle.calls_remaining} " \
+        "active_reconnect_buffer=#{row[:active_reconnect_buffer]} " \
         "ringcentral_success=#{result[:success]}"
       )
 
@@ -127,6 +129,12 @@ module Ringcentral
       row
     end
 
+    def active_reconnect_buffer?(user)
+      user.support_call_sessions
+        .where("buffer_expires_at > ?", time)
+        .exists?
+    end
+
     def build_summary
       {
         total: results.length,
@@ -136,12 +144,16 @@ module Ringcentral
           row.dig(:ringcentral_result, :phone).present? &&
             row[:calls_allowed].present? &&
             row[:calls_used].present? &&
-            row[:calls_used] >= row[:calls_allowed]
+            row[:calls_used] >= row[:calls_allowed] &&
+            row[:active_reconnect_buffer] == false
         end,
         unblocked_or_kept_unblocked: results.count do |row|
           row[:calls_allowed].present? &&
             row[:calls_used].present? &&
-            row[:calls_used] < row[:calls_allowed]
+            (
+              row[:calls_used] < row[:calls_allowed] ||
+                row[:active_reconnect_buffer] == true
+            )
         end
       }
     end

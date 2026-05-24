@@ -25,6 +25,15 @@ module Ringcentral
         return Ringcentral::UnblockPhoneNumber.call(user.phone)
       end
 
+      if active_reconnect_buffer?
+        Rails.logger.info(
+          "[RingCentral Sync Blocked Caller] Active reconnect buffer; keeping user unblocked " \
+          "user_id=#{user.id} phone=#{user.phone}"
+        )
+
+        return Ringcentral::UnblockPhoneNumber.call(user.phone)
+      end
+
       if cycle.calls_used >= cycle.calls_allowed
         Rails.logger.info(
           "[RingCentral Sync Blocked Caller] Blocking over-limit user_id=#{user.id} " \
@@ -58,6 +67,12 @@ module Ringcentral
     private
 
     attr_reader :user, :time
+
+    def active_reconnect_buffer?
+      user.support_call_sessions
+        .where("buffer_expires_at > ?", time)
+        .exists?
+    end
 
     def failure!(reason)
       Rails.logger.error(

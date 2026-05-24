@@ -14,6 +14,7 @@ class SupportCallSession < ApplicationRecord
     canceled
     allowed_pending_forward
     allowed_passthrough
+    reconnect_buffer
     forwarded
     blocked
   ].freeze
@@ -37,6 +38,12 @@ class SupportCallSession < ApplicationRecord
     buffer_expires_at.present? && buffer_expires_at > Time.current
   end
 
+  def refresh_reconnect_buffer!
+    update!(
+      buffer_expires_at: RECONNECT_BUFFER_DURATION.from_now
+    )
+  end
+
   def mark_chargeable!(duration:)
     should_sync_ringcentral_block = false
 
@@ -56,6 +63,8 @@ class SupportCallSession < ApplicationRecord
       should_sync_ringcentral_block = support_call_cycle.calls_used >= support_call_cycle.calls_allowed
     end
 
+    # Sync still runs, but SyncBlockedCaller now sees the active reconnect buffer
+    # and keeps the caller unblocked during the 15-minute reconnect window.
     sync_ringcentral_blocked_status! if should_sync_ringcentral_block
   end
 

@@ -23,16 +23,18 @@ module Ringcentral
         return handle_answered_event!
       end
 
+      # RingCentral may send Disconnected as inbound or outbound.
+      # Handle it before direction/actionable-status skips so we can extend the reconnect buffer.
+      if event.status == "Disconnected"
+        return handle_disconnected_event!
+      end
+
       return skip!("not_inbound") unless event.direction == "Inbound"
       return skip!("not_actionable_status") unless ACTIONABLE_STATUSES.include?(event.status)
       return skip!("missing_telephony_session_id") if event.telephony_session_id.blank?
       return skip!("missing_party_id") if event.party_id.blank?
       return skip!("missing_caller_phone") if event.caller_phone.blank?
 
-      # IMPORTANT:
-      # RingCentral sends multiple party IDs for the same call because the call
-      # hits MOM's buffer / queue routing. We only want one support session and
-      # one enforcement attempt per telephony_session_id.
       existing_session = SupportCallSession.find_by(
         ringcentral_telephony_session_id: event.telephony_session_id
       )
@@ -66,7 +68,14 @@ module Ringcentral
         return blocked_without_session!("no_current_call_cycle", enforcement_result)
       end
 
-      unless cycle.calls_used < cycle.calls_allowed
+      if cycle.calls_used >= cycle.calls_allowed
+        active_buffer_session = active_reconnect_buffer_session_for(user)
+
+        if active_buffer_session.present?
+          create_reconnect_buffer_session!(user, cycle, active_buffer_session)
+          return processed!("allowed_reconnect_buffer")
+        end
+
         session = create_blocked_session!(user, cycle, "no_calls_remaining")
         enforcement_result = enforce_blocked_call!
 
@@ -122,6 +131,13 @@ module Ringcentral
         .first
     end
 
+    def active_reconnect_buffer_session_for(user)
+      user.support_call_sessions
+        .where("buffer_expires_at > ?", Time.current)
+        .order(buffer_expires_at: :desc)
+        .first
+    end
+
     def handle_answered_event!
       return skip!("answered_missing_telephony_session_id") if event.telephony_session_id.blank?
 
@@ -145,11 +161,42 @@ module Ringcentral
         ringcentral_status: event.status
       )
 
-      # This increments calls_used once through SupportCallSession#mark_chargeable!.
-      # The model already protects against double-charging with return if chargeable?.
+      # This increments calls_used once and starts the 15-minute reconnect buffer.
       session.mark_chargeable!(duration: 0)
 
       processed!("answered_charged_call")
+    end
+
+    def handle_disconnected_event!
+      return skip!("disconnected_missing_telephony_session_id") if event.telephony_session_id.blank?
+
+      session = SupportCallSession
+        .where(ringcentral_telephony_session_id: event.telephony_session_id)
+        .order(created_at: :asc)
+        .first
+
+      unless session.present?
+        return skip!("disconnected_no_matching_session")
+      end
+
+      session.update!(
+        ended_at: Time.current,
+        ringcentral_status: event.status
+      )
+
+      if session.chargeable?
+        session.refresh_reconnect_buffer!
+
+        Rails.logger.info(
+          "[RingCentral Processor] refreshed reconnect buffer after disconnect " \
+          "event_id=#{event.id} session_id=#{session.id} " \
+          "buffer_expires_at=#{session.buffer_expires_at}"
+        )
+
+        Ringcentral::SyncBlockedCaller.call(session.user, Time.current)
+      end
+
+      processed!("disconnected_session_updated")
     end
 
     def create_allowed_passthrough_session!(user, cycle)
@@ -159,6 +206,26 @@ module Ringcentral
         status: "allowed_passthrough",
         started_at: Time.current,
         chargeable: false,
+        ringcentral_telephony_session_id: event.telephony_session_id,
+        ringcentral_party_id: event.party_id,
+        ringcentral_status: event.status,
+        caller_phone: event.caller_phone,
+        to_phone: event.to_phone,
+        ringcentral_extension_id: event.extension_id,
+        ringcentral_to_name: event.to_name,
+        ringcentral_raw_payload: event.raw_payload
+      )
+    end
+
+    def create_reconnect_buffer_session!(user, cycle, active_buffer_session)
+      SupportCallSession.create!(
+        user: user,
+        support_call_cycle: cycle,
+        status: "reconnect_buffer",
+        started_at: Time.current,
+        chargeable: false,
+        buffer_expires_at: active_buffer_session.buffer_expires_at,
+        failure_reason: "active_reconnect_buffer",
         ringcentral_telephony_session_id: event.telephony_session_id,
         ringcentral_party_id: event.party_id,
         ringcentral_status: event.status,
