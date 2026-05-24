@@ -2,53 +2,55 @@
 
 module Ringcentral
   class SyncBlockedCaller
-    def self.call(user, time = Time.current)
-      new(user, time).call
+    def self.call(user_arg = nil, time = Time.current, user: nil)
+      resolved_user = user_arg || user
+
+      new(resolved_user, time).call
     end
 
-    def initialize(user, time)
+    def initialize(user, time = Time.current)
       @user = user
       @time = time
     end
 
     def call
       return failure!("missing_user") unless user.present?
-      return failure!("missing_phone") if user.phone.blank?
+      return failure!("missing_phone") if normalized_phone.blank?
 
-      cycle = user.support_call_cycles.current_for_time(time).order(cycle_start_at: :desc).first
+      cycle = current_cycle
 
       unless cycle.present?
         Rails.logger.info(
-          "[RingCentral Sync Blocked Caller] No current cycle; unblocking user_id=#{user.id}"
+          "[RingCentral Sync Blocked Caller] No current cycle; unblocking user_id=#{user.id} phone=#{normalized_phone}"
         )
 
-        return Ringcentral::UnblockPhoneNumber.call(user.phone)
+        return Ringcentral::UnblockPhoneNumber.call(normalized_phone)
       end
 
       if active_reconnect_buffer?
         Rails.logger.info(
           "[RingCentral Sync Blocked Caller] Active reconnect buffer; keeping user unblocked " \
-          "user_id=#{user.id} phone=#{user.phone}"
+          "user_id=#{user.id} phone=#{normalized_phone}"
         )
 
-        return Ringcentral::UnblockPhoneNumber.call(user.phone)
+        return Ringcentral::UnblockPhoneNumber.call(normalized_phone)
       end
 
       if cycle.calls_used >= cycle.calls_allowed
         Rails.logger.info(
           "[RingCentral Sync Blocked Caller] Blocking over-limit user_id=#{user.id} " \
-          "phone=#{user.phone} calls_used=#{cycle.calls_used} calls_allowed=#{cycle.calls_allowed}"
+          "phone=#{normalized_phone} calls_used=#{cycle.calls_used} calls_allowed=#{cycle.calls_allowed}"
         )
 
-        Ringcentral::BlockPhoneNumber.call(user.phone)
-      else
-        Rails.logger.info(
-          "[RingCentral Sync Blocked Caller] Unblocking under-limit user_id=#{user.id} " \
-          "phone=#{user.phone} calls_used=#{cycle.calls_used} calls_allowed=#{cycle.calls_allowed}"
-        )
-
-        Ringcentral::UnblockPhoneNumber.call(user.phone)
+        return Ringcentral::BlockPhoneNumber.call(normalized_phone)
       end
+
+      Rails.logger.info(
+        "[RingCentral Sync Blocked Caller] Unblocking under-limit user_id=#{user.id} " \
+        "phone=#{normalized_phone} calls_used=#{cycle.calls_used} calls_allowed=#{cycle.calls_allowed}"
+      )
+
+      Ringcentral::UnblockPhoneNumber.call(normalized_phone)
     rescue StandardError => e
       Rails.logger.error(
         "[RingCentral Sync Blocked Caller] FAILED user_id=#{user&.id} " \
@@ -59,6 +61,7 @@ module Ringcentral
       {
         success: false,
         user_id: user&.id,
+        phone: normalized_phone,
         error_class: e.class.name,
         error_message: e.message
       }
@@ -68,10 +71,21 @@ module Ringcentral
 
     attr_reader :user, :time
 
+    def current_cycle
+      user.support_call_cycles
+        .current_for_time(time)
+        .order(cycle_start_at: :desc)
+        .first
+    end
+
     def active_reconnect_buffer?
       user.support_call_sessions
         .where("buffer_expires_at > ?", time)
         .exists?
+    end
+
+    def normalized_phone
+      @normalized_phone ||= user&.phone.to_s.strip.presence
     end
 
     def failure!(reason)
@@ -82,6 +96,7 @@ module Ringcentral
       {
         success: false,
         user_id: user&.id,
+        phone: normalized_phone,
         error_class: "ValidationError",
         error_message: reason
       }
