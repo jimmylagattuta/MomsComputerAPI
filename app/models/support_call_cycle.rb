@@ -18,4 +18,8 @@ class SupportCallCycle < ApplicationRecord
   def has_calls_remaining?
     calls_remaining > 0
   end
+
+  def over_call_limit?
+    calls_used >= calls_allowed
+  end
 end

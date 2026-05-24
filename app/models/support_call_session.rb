@@ -38,9 +38,11 @@ class SupportCallSession < ApplicationRecord
   end
 
   def mark_chargeable!(duration:)
-    return if chargeable?
+    should_sync_ringcentral_block = false
 
     transaction do
+      return if chargeable?
+
       update!(
         chargeable: true,
         charged_at: Time.current,
@@ -49,6 +51,34 @@ class SupportCallSession < ApplicationRecord
       )
 
       support_call_cycle.increment!(:calls_used)
+      support_call_cycle.reload
+
+      should_sync_ringcentral_block = support_call_cycle.calls_used >= support_call_cycle.calls_allowed
     end
+
+    sync_ringcentral_blocked_status! if should_sync_ringcentral_block
+  end
+
+  private
+
+  def sync_ringcentral_blocked_status!
+    return if user.phone.blank?
+
+    result = Ringcentral::SyncBlockedCaller.call(user)
+
+    Rails.logger.info(
+      "[SupportCallSession] RingCentral block sync after charge " \
+      "session_id=#{id} user_id=#{user.id} result=#{result.inspect}"
+    )
+
+    result
+  rescue StandardError => e
+    Rails.logger.error(
+      "[SupportCallSession] RingCentral block sync failed " \
+      "session_id=#{id} user_id=#{user.id} #{e.class}: #{e.message}"
+    )
+    Rails.logger.error(e.backtrace.first(10).join("\n"))
+
+    nil
   end
 end
