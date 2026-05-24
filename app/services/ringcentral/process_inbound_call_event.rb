@@ -28,31 +28,40 @@ module Ringcentral
 
       user = find_user_by_phone(event.caller_phone)
 
-      # Important business rule:
-      # Unknown callers are public office callers, not app users.
-      # Let RingCentral's normal office routing continue.
+      # Public office callers are not app users.
+      # Unknown numbers should pass through to the normal RingCentral office routing.
       unless user.present?
         return passthrough_without_session!("unknown_phone")
       end
 
-      # Known app user, but not allowed to use app-based call access.
       unless user.status == "active"
-        return blocked_without_session!("inactive_user")
+        reject_result = reject_call!
+        return blocked_without_session!("inactive_user", reject_result)
       end
 
       unless user.phone_verified_at.present?
-        return blocked_without_session!("phone_not_verified")
+        reject_result = reject_call!
+        return blocked_without_session!("phone_not_verified", reject_result)
       end
 
       cycle = current_call_cycle_for(user)
 
       unless cycle.present?
-        return blocked_without_session!("no_current_call_cycle")
+        reject_result = reject_call!
+        return blocked_without_session!("no_current_call_cycle", reject_result)
       end
 
       unless cycle.calls_used < cycle.calls_allowed
-        create_blocked_session!(user, cycle, "no_calls_remaining")
-        return processed!("blocked_no_calls_remaining")
+        session = create_blocked_session!(user, cycle, "no_calls_remaining")
+        reject_result = reject_call!
+
+        session.update!(
+          failure_reason: reject_result[:success] ? "ringcentral_reject_success" : "ringcentral_reject_failed"
+        )
+
+        return processed!(
+          reject_result[:success] ? "blocked_no_calls_remaining_rejected" : "blocked_no_calls_remaining_reject_failed"
+        )
       end
 
       create_allowed_passthrough_session!(user, cycle)
@@ -75,7 +84,17 @@ module Ringcentral
     attr_reader :event
 
     def find_user_by_phone(phone)
-      User.find_by(phone: phone)
+      normalized = phone.to_s.strip
+
+      possible_numbers = [
+        normalized,
+        normalized.delete_prefix("+1"),
+        normalized.delete_prefix("+"),
+        normalized.gsub(/\D/, ""),
+        "+1#{normalized.gsub(/\D/, "").last(10)}"
+      ].uniq
+
+      User.where(phone: possible_numbers).first
     end
 
     def current_call_cycle_for(user)
@@ -122,6 +141,10 @@ module Ringcentral
       )
     end
 
+    def reject_call!
+      Ringcentral::RejectCallParty.call(event)
+    end
+
     def passthrough_without_session!(reason)
       event.update!(
         processed: true,
@@ -137,16 +160,29 @@ module Ringcentral
       true
     end
 
-    def blocked_without_session!(reason)
+    def blocked_without_session!(reason, reject_result = nil)
+      suffix =
+        if reject_result.nil?
+          nil
+        elsif reject_result[:success]
+          "rejected"
+        else
+          "reject_failed"
+        end
+
+      result = ["blocked_#{reason}", suffix].compact.join("_")
+
       event.update!(
         processed: true,
         processed_at: Time.current,
-        processing_result: "blocked_#{reason}"
+        processing_result: result
       )
 
       Rails.logger.info(
         "[RingCentral Processor] blocked_without_session " \
-        "event_id=#{event.id} reason=#{reason} caller_phone=#{event.caller_phone}"
+        "event_id=#{event.id} reason=#{reason} " \
+        "caller_phone=#{event.caller_phone} " \
+        "reject_result=#{reject_result.inspect}"
       )
 
       true
