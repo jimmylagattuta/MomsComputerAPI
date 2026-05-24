@@ -1,6 +1,12 @@
 module Ringcentral
   class ProcessInboundCallEvent
     ACTIONABLE_STATUSES = ["Setup", "Proceeding"].freeze
+    CHARGEABLE_ALLOWED_STATUSES = [
+      "allowed_passthrough",
+      "allowed_pending_forward",
+      "forwarded",
+      "in_progress"
+    ].freeze
 
     def self.call(event)
       new(event).call
@@ -11,15 +17,24 @@ module Ringcentral
     end
 
     def call
+      # RingCentral may send Answered as an Outbound mirror event.
+      # Handle Answered before the inbound/actionable-status skips.
+      if event.status == "Answered"
+        return handle_answered_event!
+      end
+
       return skip!("not_inbound") unless event.direction == "Inbound"
       return skip!("not_actionable_status") unless ACTIONABLE_STATUSES.include?(event.status)
       return skip!("missing_telephony_session_id") if event.telephony_session_id.blank?
       return skip!("missing_party_id") if event.party_id.blank?
       return skip!("missing_caller_phone") if event.caller_phone.blank?
 
+      # IMPORTANT:
+      # RingCentral sends multiple party IDs for the same call because the call
+      # hits MOM's buffer / queue routing. We only want one support session and
+      # one enforcement attempt per telephony_session_id.
       existing_session = SupportCallSession.find_by(
-        ringcentral_telephony_session_id: event.telephony_session_id,
-        ringcentral_party_id: event.party_id
+        ringcentral_telephony_session_id: event.telephony_session_id
       )
 
       if existing_session.present?
@@ -85,14 +100,17 @@ module Ringcentral
 
     def find_user_by_phone(phone)
       normalized = phone.to_s.strip
+      digits = normalized.gsub(/\D/, "")
+      last_10 = digits.last(10)
 
       possible_numbers = [
         normalized,
         normalized.delete_prefix("+1"),
         normalized.delete_prefix("+"),
-        normalized.gsub(/\D/, ""),
-        "+1#{normalized.gsub(/\D/, "").last(10)}"
-      ].uniq
+        digits,
+        last_10,
+        "+1#{last_10}"
+      ].compact.uniq
 
       User.where(phone: possible_numbers).first
     end
@@ -102,6 +120,36 @@ module Ringcentral
         .where("cycle_start_at <= ? AND cycle_end_at >= ?", Time.current, Time.current)
         .order(cycle_start_at: :desc)
         .first
+    end
+
+    def handle_answered_event!
+      return skip!("answered_missing_telephony_session_id") if event.telephony_session_id.blank?
+
+      session = SupportCallSession
+        .where(ringcentral_telephony_session_id: event.telephony_session_id)
+        .where(status: CHARGEABLE_ALLOWED_STATUSES)
+        .order(created_at: :asc)
+        .first
+
+      unless session.present?
+        return skip!("answered_no_matching_allowed_session")
+      end
+
+      if session.chargeable?
+        return skip!("answered_session_already_chargeable")
+      end
+
+      session.update!(
+        status: "in_progress",
+        answered_at: Time.current,
+        ringcentral_status: event.status
+      )
+
+      # This increments calls_used once through SupportCallSession#mark_chargeable!.
+      # The model already protects against double-charging with return if chargeable?.
+      session.mark_chargeable!(duration: 0)
+
+      processed!("answered_charged_call")
     end
 
     def create_allowed_passthrough_session!(user, cycle)
