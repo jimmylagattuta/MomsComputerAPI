@@ -19,7 +19,7 @@ module Ringcentral
 
       Rails.logger.info(
         "[RingCentral Unblock Number] Starting phone=#{normalized_phone} " \
-        "extension_id=#{blocking_extension_id}"
+        "extension_id=#{blocking_extension_id} path=#{caller_blocking_phone_numbers_path}"
       )
 
       records = matching_blocked_records(normalized_phone)
@@ -44,7 +44,7 @@ module Ringcentral
 
         next if record_id.blank?
 
-        response = rc_client.delete("#{blocked_allowed_numbers_path}/#{record_id}")
+        response = rc_client.delete("#{caller_blocking_phone_numbers_path}/#{record_id}")
 
         deleted << {
           id: record_id,
@@ -67,7 +67,7 @@ module Ringcentral
     rescue StandardError => e
       Rails.logger.error(
         "[RingCentral Unblock Number] FAILED phone=#{phone.inspect} " \
-        "#{e.class}: #{e.message}"
+        "extension_id=#{blocking_extension_id} #{e.class}: #{e.message}"
       )
       Rails.logger.error(e.backtrace.first(10).join("\n"))
 
@@ -100,17 +100,16 @@ module Ringcentral
       ENV.fetch("RINGCENTRAL_BLOCKING_EXTENSION_ID", "~")
     end
 
-    def blocked_allowed_numbers_path
-      "/restapi/v1.0/account/~/extension/#{blocking_extension_id}/blocked-allowed-numbers"
+    def caller_blocking_phone_numbers_path
+      "/restapi/v1.0/account/~/extension/#{blocking_extension_id}/caller-blocking/phone-numbers"
     end
 
     def matching_blocked_records(normalized_phone)
-      response = rc_client.get(blocked_allowed_numbers_path)
+      response = rc_client.get(caller_blocking_phone_numbers_path)
       records = response.body["records"] || []
 
       records.select do |record|
-        normalize_phone(record["phoneNumber"]) == normalized_phone &&
-          record["status"].to_s.downcase == "blocked"
+        normalize_phone(record["phoneNumber"]) == normalized_phone
       end
     end
 
