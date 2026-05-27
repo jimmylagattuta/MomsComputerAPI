@@ -5,6 +5,8 @@ module V1
 
       before_action :authenticate_user!, only: [:logout, :change_password]
 
+      DEFAULT_MONTHLY_CALL_LIMIT = 3
+
       def signup
         user = User.new(signup_params)
         user.role ||= "senior"
@@ -146,6 +148,8 @@ module V1
       end
 
       def user_payload(user)
+        call_usage = call_usage_payload_for(user)
+
         {
           id: user.id,
           email: user.email,
@@ -166,63 +170,79 @@ module V1
           phone_verified_at: user.phone_verified_at,
 
           # ✅ Call usage fields for the mobile app settings menu
-          current_calls_this_month: current_calls_this_month_for(user),
-          monthly_call_limit: monthly_call_limit_for(user)
+          current_calls_this_month: call_usage[:current_calls_this_month],
+          monthly_call_limit: call_usage[:monthly_call_limit],
+          calls_left_this_month: call_usage[:calls_left_this_month],
+
+          # ✅ Extra debug-friendly fields
+          active_call_cycle_id: call_usage[:active_call_cycle_id],
+          call_cycle_start_at: call_usage[:call_cycle_start_at],
+          call_cycle_end_at: call_usage[:call_cycle_end_at]
         }
       end
 
-      def current_calls_this_month_for(user)
-        return 0 unless user
+      def call_usage_payload_for(user)
+        return default_call_usage_payload unless user
 
-        if user.respond_to?(:current_calls_this_month)
-          return user.current_calls_this_month.to_i
-        end
+        active_cycle = active_support_call_cycle_for(user)
 
-        if user.respond_to?(:calls_this_month)
-          return user.calls_this_month.to_i
-        end
+        calls_allowed =
+          if active_cycle
+            active_cycle.calls_allowed.to_i
+          elsif admin_user?(user)
+            999
+          else
+            DEFAULT_MONTHLY_CALL_LIMIT
+          end
 
-        if user.respond_to?(:monthly_calls_used)
-          return user.monthly_calls_used.to_i
-        end
+        calls_used =
+          if active_cycle
+            active_cycle.calls_used.to_i
+          else
+            0
+          end
 
-        if user.respond_to?(:calls_used_this_month)
-          return user.calls_used_this_month.to_i
-        end
+        calls_left = [calls_allowed - calls_used, 0].max
 
-        0
+        Rails.logger.info(
+          "📞 [AUTH] call usage payload user_id=#{user.id} cycle_id=#{active_cycle&.id} calls_used=#{calls_used} calls_allowed=#{calls_allowed} calls_left=#{calls_left}"
+        )
+
+        {
+          current_calls_this_month: calls_used,
+          monthly_call_limit: calls_allowed,
+          calls_left_this_month: calls_left,
+          active_call_cycle_id: active_cycle&.id,
+          call_cycle_start_at: active_cycle&.cycle_start_at,
+          call_cycle_end_at: active_cycle&.cycle_end_at
+        }
       rescue => e
-        Rails.logger.error("❌ [AUTH] current_calls_this_month_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
-        0
+        Rails.logger.error("❌ [AUTH] call_usage_payload_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        default_call_usage_payload
       end
 
-      def monthly_call_limit_for(user)
-        return 0 unless user
+      def active_support_call_cycle_for(user)
+        return nil unless defined?(SupportCallCycle)
 
-        if user.respond_to?(:monthly_call_limit)
-          return user.monthly_call_limit.to_i
-        end
-
-        if user.respond_to?(:call_limit)
-          return user.call_limit.to_i
-        end
-
-        if user.respond_to?(:monthly_calls_limit)
-          return user.monthly_calls_limit.to_i
-        end
-
-        if user.respond_to?(:calls_per_month)
-          return user.calls_per_month.to_i
-        end
-
-        if admin_user?(user)
-          return 999
-        end
-
-        0
+        SupportCallCycle
+          .where(user_id: user.id)
+          .where("cycle_start_at <= ? AND cycle_end_at >= ?", Time.current, Time.current)
+          .order(cycle_start_at: :desc)
+          .first
       rescue => e
-        Rails.logger.error("❌ [AUTH] monthly_call_limit_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
-        0
+        Rails.logger.error("❌ [AUTH] active_support_call_cycle_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        nil
+      end
+
+      def default_call_usage_payload
+        {
+          current_calls_this_month: 0,
+          monthly_call_limit: DEFAULT_MONTHLY_CALL_LIMIT,
+          calls_left_this_month: DEFAULT_MONTHLY_CALL_LIMIT,
+          active_call_cycle_id: nil,
+          call_cycle_start_at: nil,
+          call_cycle_end_at: nil
+        }
       end
 
       def admin_user?(user)
