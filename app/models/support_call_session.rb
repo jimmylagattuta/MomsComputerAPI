@@ -77,6 +77,8 @@ class SupportCallSession < ApplicationRecord
   end
 
   def schedule_delayed_charge!
+    reload
+
     return false unless answered?
     return false unless ended?
     return false if charged?
@@ -111,13 +113,38 @@ class SupportCallSession < ApplicationRecord
 
   def mark_chargeable!(duration: nil)
     should_sync_ringcentral_block = false
+    charge_was_applied = false
 
-    transaction do
+    self.class.transaction do
+      lock!
       reload
 
-      return false if charged?
-      return false unless answered?
-      return false unless ended?
+      if charged?
+        Rails.logger.info(
+          "[SupportCallSession] skipped charge because session is already charged " \
+          "session_id=#{id} user_id=#{user_id} charged_at=#{charged_at} chargeable=#{chargeable}"
+        )
+
+        return false
+      end
+
+      unless answered?
+        Rails.logger.info(
+          "[SupportCallSession] skipped charge because session was not answered " \
+          "session_id=#{id} user_id=#{user_id}"
+        )
+
+        return false
+      end
+
+      unless ended?
+        Rails.logger.info(
+          "[SupportCallSession] skipped charge because session has not ended " \
+          "session_id=#{id} user_id=#{user_id}"
+        )
+
+        return false
+      end
 
       calculated_duration =
         if duration.present?
@@ -128,21 +155,33 @@ class SupportCallSession < ApplicationRecord
           0
         end
 
+      cycle = support_call_cycle
+      cycle.lock!
+      cycle.reload
+
       update!(
         chargeable: true,
         charged_at: Time.current,
         duration_seconds: calculated_duration
       )
 
-      support_call_cycle.increment!(:calls_used)
-      support_call_cycle.reload
+      cycle.increment!(:calls_used)
+      cycle.reload
 
-      should_sync_ringcentral_block = support_call_cycle.calls_used >= support_call_cycle.calls_allowed
+      should_sync_ringcentral_block = cycle.calls_used >= cycle.calls_allowed
+      charge_was_applied = true
+
+      Rails.logger.info(
+        "[SupportCallSession] charged answered call " \
+        "session_id=#{id} user_id=#{user_id} cycle_id=#{cycle.id} " \
+        "calls_used=#{cycle.calls_used} calls_allowed=#{cycle.calls_allowed} " \
+        "duration_seconds=#{calculated_duration}"
+      )
     end
 
-    sync_ringcentral_blocked_status! if should_sync_ringcentral_block
+    sync_ringcentral_blocked_status! if charge_was_applied && should_sync_ringcentral_block
 
-    true
+    charge_was_applied
   end
 
   private

@@ -37,7 +37,7 @@ module SupportCalls
       if session.charged?
         Rails.logger.info(
           "[SupportCalls::FinalizeAnsweredCallJob] skipped already charged " \
-          "session_id=#{session.id}"
+          "session_id=#{session.id} charged_at=#{session.charged_at} chargeable=#{session.chargeable}"
         )
 
         return false
@@ -63,13 +63,27 @@ module SupportCalls
         return false
       end
 
-      session.mark_chargeable!
+      charged = session.mark_chargeable!
+
+      session.reload
+      cycle = session.support_call_cycle.reload
+
+      unless charged
+        Rails.logger.info(
+          "[SupportCalls::FinalizeAnsweredCallJob] charge skipped by session guard " \
+          "session_id=#{session.id} user_id=#{session.user_id} " \
+          "chargeable=#{session.chargeable} charged_at=#{session.charged_at} " \
+          "calls_used=#{cycle.calls_used} calls_allowed=#{cycle.calls_allowed}"
+        )
+
+        return false
+      end
 
       Rails.logger.info(
         "[SupportCalls::FinalizeAnsweredCallJob] charged answered support call " \
         "session_id=#{session.id} user_id=#{session.user_id} " \
-        "calls_used=#{session.support_call_cycle.reload.calls_used} " \
-        "calls_allowed=#{session.support_call_cycle.calls_allowed}"
+        "calls_used=#{cycle.calls_used} " \
+        "calls_allowed=#{cycle.calls_allowed}"
       )
 
       true
