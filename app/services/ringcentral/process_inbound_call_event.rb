@@ -1,9 +1,11 @@
 module Ringcentral
   class ProcessInboundCallEvent
     ACTIONABLE_STATUSES = ["Setup", "Proceeding"].freeze
-    CHARGEABLE_ALLOWED_STATUSES = [
+
+    ANSWERABLE_SESSION_STATUSES = [
       "allowed_passthrough",
       "allowed_pending_forward",
+      "reconnect_buffer",
       "forwarded",
       "in_progress"
     ].freeze
@@ -17,14 +19,14 @@ module Ringcentral
     end
 
     def call
-      # RingCentral may send Answered as an Outbound mirror event.
-      # Handle Answered before the inbound/actionable-status skips.
+      # RingCentral may send Answered after Setup/Proceeding.
+      # Answered should mark the session as connected, but must not charge yet.
       if event.status == "Answered"
         return handle_answered_event!
       end
 
-      # RingCentral may send Disconnected as inbound or outbound.
-      # Handle it before direction/actionable-status skips so we can extend the reconnect buffer.
+      # Disconnected should end the session.
+      # If this was answered, it starts the 15-minute delayed-charge window.
       if event.status == "Disconnected"
         return handle_disconnected_event!
       end
@@ -36,17 +38,19 @@ module Ringcentral
       return skip!("missing_caller_phone") if event.caller_phone.blank?
 
       existing_session = SupportCallSession.find_by(
-        ringcentral_telephony_session_id: event.telephony_session_id
+        ringcentral_telephony_session_id: event.telephony_session_id,
+        ringcentral_party_id: event.party_id
       )
 
       if existing_session.present?
-        return skip!("duplicate_already_has_session")
+        update_existing_session_from_event!(existing_session)
+        return processed!("existing_session_updated")
       end
 
       user = find_user_by_phone(event.caller_phone)
 
       # Public office callers are not app users.
-      # Unknown numbers should pass through to the normal RingCentral office routing.
+      # Unknown numbers should pass through to normal RingCentral routing.
       unless user.present?
         return passthrough_without_session!("unknown_phone")
       end
@@ -138,16 +142,23 @@ module Ringcentral
         .first
     end
 
+    def update_existing_session_from_event!(session)
+      session.update!(
+        ringcentral_status: event.status,
+        caller_phone: event.caller_phone.presence || session.caller_phone,
+        to_phone: event.to_phone.presence || session.to_phone,
+        ringcentral_extension_id: event.extension_id.presence || session.ringcentral_extension_id,
+        ringcentral_to_name: event.to_name.presence || session.ringcentral_to_name,
+        ringcentral_raw_payload: event.raw_payload.presence || session.ringcentral_raw_payload
+      )
+    end
+
     def handle_answered_event!
-      # Important:
-      # RingCentral can send Outbound / Answered when the call reaches the queue/buffer,
-      # even if no human support person answered. Do not charge those events.
-      return skip!("answered_not_inbound") unless event.direction == "Inbound"
       return skip!("answered_missing_telephony_session_id") if event.telephony_session_id.blank?
 
       session = SupportCallSession
         .where(ringcentral_telephony_session_id: event.telephony_session_id)
-        .where(status: CHARGEABLE_ALLOWED_STATUSES)
+        .where(status: ANSWERABLE_SESSION_STATUSES)
         .order(created_at: :asc)
         .first
 
@@ -155,20 +166,23 @@ module Ringcentral
         return skip!("answered_no_matching_allowed_session")
       end
 
-      if session.chargeable?
-        return skip!("answered_session_already_chargeable")
+      if session.blocked_reason.present?
+        return skip!("answered_matching_session_was_blocked")
       end
 
-      session.update!(
-        status: "in_progress",
-        answered_at: Time.current,
-        ringcentral_status: event.status
+      if session.charged?
+        return skip!("answered_session_already_charged")
+      end
+
+      session.mark_answered!(ringcentral_status: event.status)
+
+      Rails.logger.info(
+        "[RingCentral Processor] marked session answered without charging " \
+        "event_id=#{event.id} session_id=#{session.id} " \
+        "user_id=#{session.user_id} answered_at=#{session.answered_at}"
       )
 
-      # This increments calls_used once and starts the 15-minute reconnect buffer.
-      session.mark_chargeable!(duration: 0)
-
-      processed!("answered_charged_call")
+      processed!("answered_marked_pending_disconnect")
     end
 
     def handle_disconnected_event!
@@ -184,23 +198,40 @@ module Ringcentral
       end
 
       session.update!(
-        ended_at: Time.current,
+        ended_at: session.ended_at || Time.current,
         ringcentral_status: event.status
       )
 
-      if session.chargeable?
-        session.refresh_reconnect_buffer!
-
+      unless session.answered?
         Rails.logger.info(
-          "[RingCentral Processor] refreshed reconnect buffer after disconnect " \
-          "event_id=#{event.id} session_id=#{session.id} " \
-          "buffer_expires_at=#{session.buffer_expires_at}"
+          "[RingCentral Processor] disconnected unanswered session; no charge scheduled " \
+          "event_id=#{event.id} session_id=#{session.id}"
         )
 
-        Ringcentral::SyncBlockedCaller.call(session.user, Time.current)
+        return processed!("disconnected_unanswered_no_charge")
       end
 
-      processed!("disconnected_session_updated")
+      if session.charged?
+        Rails.logger.info(
+          "[RingCentral Processor] disconnected already charged session; no new charge scheduled " \
+          "event_id=#{event.id} session_id=#{session.id}"
+        )
+
+        return processed!("disconnected_already_charged")
+      end
+
+      session.mark_ended_and_start_reconnect_buffer!(ringcentral_status: event.status)
+      session.schedule_delayed_charge!
+
+      Rails.logger.info(
+        "[RingCentral Processor] answered call ended; delayed charge scheduled " \
+        "event_id=#{event.id} session_id=#{session.id} " \
+        "buffer_expires_at=#{session.buffer_expires_at}"
+      )
+
+      Ringcentral::SyncBlockedCaller.call(session.user, Time.current)
+
+      processed!("disconnected_answered_delayed_charge_scheduled")
     end
 
     def create_allowed_passthrough_session!(user, cycle)

@@ -163,8 +163,72 @@ module V1
           updated_at: user.updated_at,
           last_login_at: user.last_login_at,
           last_seen_at: user.last_seen_at,
-          phone_verified_at: user.phone_verified_at
+          phone_verified_at: user.phone_verified_at,
+
+          # ✅ Call usage fields for the mobile app settings menu
+          current_calls_this_month: current_calls_this_month_for(user),
+          monthly_call_limit: monthly_call_limit_for(user)
         }
+      end
+
+      def current_calls_this_month_for(user)
+        return 0 unless user
+
+        if user.respond_to?(:current_calls_this_month)
+          return user.current_calls_this_month.to_i
+        end
+
+        if user.respond_to?(:calls_this_month)
+          return user.calls_this_month.to_i
+        end
+
+        if user.respond_to?(:monthly_calls_used)
+          return user.monthly_calls_used.to_i
+        end
+
+        if user.respond_to?(:calls_used_this_month)
+          return user.calls_used_this_month.to_i
+        end
+
+        0
+      rescue => e
+        Rails.logger.error("❌ [AUTH] current_calls_this_month_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        0
+      end
+
+      def monthly_call_limit_for(user)
+        return 0 unless user
+
+        if user.respond_to?(:monthly_call_limit)
+          return user.monthly_call_limit.to_i
+        end
+
+        if user.respond_to?(:call_limit)
+          return user.call_limit.to_i
+        end
+
+        if user.respond_to?(:monthly_calls_limit)
+          return user.monthly_calls_limit.to_i
+        end
+
+        if user.respond_to?(:calls_per_month)
+          return user.calls_per_month.to_i
+        end
+
+        if admin_user?(user)
+          return 999
+        end
+
+        0
+      rescue => e
+        Rails.logger.error("❌ [AUTH] monthly_call_limit_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        0
+      end
+
+      def admin_user?(user)
+        user.role.to_s == "admin" ||
+          user.role.to_s == "super_admin" ||
+          (user.respond_to?(:admin?) && user.admin?)
       end
     end
   end
