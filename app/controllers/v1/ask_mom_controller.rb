@@ -11,21 +11,15 @@ module V1
     before_action :authenticate_user!
 
     def create
-      # ✅ Multipart images support: images[] (Rails normalizes images[] -> params[:images])
       uploaded_images = params[:images]
       uploaded_images = [uploaded_images].compact unless uploaded_images.is_a?(Array)
       uploaded_images = uploaded_images.compact
 
-      # ✅ Accept either payload shape:
-      # - { "text": "Hi" }
-      # - { "ask_mom": { "text": "Hi" } }
-      #
-      # IMPORTANT:
-      # - Allow text to be blank if images exist.
-      # - Only hard error if BOTH text blank AND no images.
       text = extract_text_param(params)
 
-      Rails.logger.info("[AskMomController] create: text_len=#{text.to_s.length} images=#{uploaded_images.length} content_type_hint=#{request.content_type}")
+      Rails.logger.info(
+        "[AskMomController] create: user_id=#{current_user.id} text_len=#{text.to_s.length} images=#{uploaded_images.length} content_type_hint=#{request.content_type}"
+      )
 
       if text.blank? && uploaded_images.empty?
         render json: {
@@ -36,6 +30,81 @@ module V1
         return
       end
 
+      tier = AskMom::Limits.tier_for_user(current_user)
+      limits = AskMom::Limits.for_user(current_user)
+
+      image_validation = validate_uploaded_images(uploaded_images, limits)
+      unless image_validation[:ok]
+        render json: {
+          error: image_validation[:error],
+          message: image_validation[:message],
+          limits: nil
+        }, status: image_validation[:status]
+        return
+      end
+
+      conversation_id = params[:conversation_id]
+      new_conversation = conversation_id.blank?
+
+      # ============================================================
+      # ✅ LIMIT CHECK BEFORE CREATING USER MESSAGE
+      # ============================================================
+      #
+      # For a new conversation, check using a temporary conversation key first.
+      # This prevents creating a Conversation if the user already hit daily limits.
+      #
+      preliminary_limiter = nil
+      preliminary_check = nil
+
+      if new_conversation
+        preliminary_limiter = AskMom::UsageLimiter.new(
+          actor_key: signed_in_actor_key,
+          tier: tier,
+          limits: limits,
+          conversation_key: "#{signed_in_actor_key}:conversation:new"
+        )
+
+        preliminary_check = preliminary_limiter.check!(
+          text: text,
+          image_count: uploaded_images.length,
+          new_conversation: true
+        )
+
+        unless preliminary_check.allowed
+          render_limit_error(preliminary_check)
+          return
+        end
+
+        conversation = current_user.conversations.create!(
+          channel: "ask_mom",
+          status: "open",
+          risk_level: "unknown",
+          last_message_at: Time.current
+        )
+      else
+        conversation = current_user.conversations.find(conversation_id)
+      end
+
+      limiter = AskMom::UsageLimiter.new(
+        actor_key: signed_in_actor_key,
+        tier: tier,
+        limits: limits,
+        conversation_key: signed_in_conversation_key(conversation)
+      )
+
+      unless new_conversation
+        check = limiter.check!(
+          text: text,
+          image_count: uploaded_images.length,
+          new_conversation: false
+        )
+
+        unless check.allowed
+          render_limit_error(check, conversation_id: conversation.id)
+          return
+        end
+      end
+
       content_type =
         if uploaded_images.any? && text.present?
           "mixed"
@@ -43,20 +112,6 @@ module V1
           "image"
         else
           "text"
-        end
-
-      conversation_id = params[:conversation_id]
-
-      conversation =
-        if conversation_id.present?
-          current_user.conversations.find(conversation_id)
-        else
-          current_user.conversations.create!(
-            channel: "ask_mom",
-            status: "open",
-            risk_level: "unknown",
-            last_message_at: Time.current
-          )
         end
 
       # Store user message (redacted if needed)
@@ -70,7 +125,11 @@ module V1
           content: redacted,
           content_type: content_type,
           risk_level: "unknown",
-          metadata: { redacted: true, redaction_reasons: reasons }
+          metadata: {
+            redacted: true,
+            redaction_reasons: reasons,
+            access_tier: tier.to_s
+          }
         )
 
         user_message.create_blocked_artifact!(
@@ -79,43 +138,25 @@ module V1
           metadata: { note: "Original content intentionally not stored." }
         )
       else
-        # ✅ If image-only, store empty string (NOT nil) so downstream code stays simple.
         user_message = conversation.messages.create!(
           sender_type: "user",
           sender_id: current_user.id,
           content: text.to_s,
           content_type: content_type,
           risk_level: "unknown",
-          metadata: {}
+          metadata: {
+            access_tier: tier.to_s
+          }
         )
       end
 
-      # ✅ Attach images AFTER creating the message
       if uploaded_images.any?
         uploaded_images.each { |img| user_message.images.attach(img) }
       end
 
       Rails.logger.info(
-        "[AskMomController] stored user_message id=#{user_message.id} content_type=#{user_message.content_type} images_attached=#{user_message.images.attached? ? user_message.images.size : 0}"
+        "[AskMomController] stored user_message id=#{user_message.id} content_type=#{user_message.content_type} images_attached=#{user_message.images.attached? ? user_message.images.size : 0} tier=#{tier}"
       )
-
-      # ✅ Anti-avalanche throttle (transport-level only)
-      recent_user_msgs =
-        conversation.messages
-                    .where(sender_type: "user")
-                    .where("created_at > ?", 10.seconds.ago)
-                    .count
-
-      if recent_user_msgs > 3
-        render json: {
-          error: "rate_limited",
-          message: "Too many messages too quickly. Please wait a moment and try again.",
-          conversation_id: conversation.id,
-          user_message_id: user_message.id,
-          user_images: image_urls_for(user_message)
-        }, status: :too_many_requests
-        return
-      end
 
       # ============================================================
       # ✅ Guardrails (pre-LLM) + deterministic contact drafts
@@ -125,7 +166,8 @@ module V1
       guard = AskMom::Guardrails.new(
         conversation: conversation,
         new_user_text: user_message.content,
-        risk_level: pre_risk_level
+        risk_level: pre_risk_level,
+        settings: guardrail_settings_for(limits)
       ).check
 
       # ✅ Hard-block only (too long / rate / llm budget)
@@ -133,8 +175,8 @@ module V1
         assistant_text = [
           guard[:friendly_message].to_s.strip.presence || "I can’t safely keep going with that right now.",
           "",
-          "Let’s contact a person instead of continuing here.",
-          "Tap Text, Email, or Call below and I’ll open your phone with a pre-filled message."
+          support_unlocked?(limits) ? "Let’s contact a person instead of continuing here." : "A real person would be better here, but Call/Text/Email Mom requires a subscription.",
+          support_unlocked?(limits) ? "Tap Text, Email, or Call below and I’ll open your phone with a pre-filled message." : "Subscribe to unlock Text Mom, Email Mom, and Call Mom."
         ].compact.join("\n")
 
         ai_message = conversation.messages.create!(
@@ -151,7 +193,8 @@ module V1
             "steps" => [],
             "escalate_suggested" => true,
             "confidence" => 0.0,
-            "title" => sanitize_title(conversation.summary.to_s)
+            "title" => sanitize_title(conversation.summary.to_s),
+            "access_tier" => tier.to_s
           }
         )
 
@@ -163,9 +206,14 @@ module V1
 
         draft = AskMom::ContactDraftBuilder.new(
           conversation: conversation,
-          user_text: user_message.content, # ✅ first-message-only
+          user_text: user_message.content,
           risk_level: pre_risk_level
         ).build
+
+        updated_limits = limiter.increment!(
+          image_count: uploaded_images.length,
+          new_conversation: new_conversation
+        )
 
         render json: {
           conversation_id: conversation.id,
@@ -179,12 +227,14 @@ module V1
 
           show_contact_panel: true,
           escalation_reason: guard[:reason],
-          contact_actions: { sms: true, email: true, call: true },
-          contact_draft: draft,
+          contact_actions: contact_actions_for(limits),
+          locked_contact_actions: locked_contact_actions_for(limits),
+          contact_draft: support_unlocked?(limits) ? draft : nil,
           contact_targets: nil,
 
           user_message_id: user_message.id,
-          user_images: image_urls_for(user_message)
+          user_images: image_urls_for(user_message),
+          limits: updated_limits
         }, status: :ok
         return
       end
@@ -193,12 +243,22 @@ module V1
       # ✅ SOFT ESCALATION (stuck 3x rule)
       # ============================================================
       if guard[:show_contact_panel]
-        assistant_text = [
-          "Okay — we’re going in circles.",
-          "",
-          "Let’s contact a person instead of continuing here.",
-          "Tap Text, Email, or Call below and I’ll open your phone with a pre-filled message."
-        ].join("\n")
+        assistant_text =
+          if support_unlocked?(limits)
+            [
+              "Okay — we’re going in circles.",
+              "",
+              "Let’s contact a person instead of continuing here.",
+              "Tap Text, Email, or Call below and I’ll open your phone with a pre-filled message."
+            ].join("\n")
+          else
+            [
+              "Okay — we’re going in circles.",
+              "",
+              "A real person would be better here, but Call/Text/Email Mom requires a subscription.",
+              "Subscribe to unlock Text Mom, Email Mom, and Call Mom."
+            ].join("\n")
+          end
 
         ai_message = conversation.messages.create!(
           sender_type: "ai",
@@ -214,7 +274,8 @@ module V1
             "steps" => [],
             "escalate_suggested" => true,
             "confidence" => 0.0,
-            "title" => sanitize_title(conversation.summary.to_s)
+            "title" => sanitize_title(conversation.summary.to_s),
+            "access_tier" => tier.to_s
           }
         )
 
@@ -226,9 +287,14 @@ module V1
 
         draft = AskMom::ContactDraftBuilder.new(
           conversation: conversation,
-          user_text: user_message.content, # ✅ first-message-only
+          user_text: user_message.content,
           risk_level: pre_risk_level
         ).build
+
+        updated_limits = limiter.increment!(
+          image_count: uploaded_images.length,
+          new_conversation: new_conversation
+        )
 
         render json: {
           conversation_id: conversation.id,
@@ -242,12 +308,14 @@ module V1
 
           show_contact_panel: true,
           escalation_reason: guard[:reason] || "stuck",
-          contact_actions: { sms: true, email: true, call: true },
-          contact_draft: draft,
+          contact_actions: contact_actions_for(limits),
+          locked_contact_actions: locked_contact_actions_for(limits),
+          contact_draft: support_unlocked?(limits) ? draft : nil,
           contact_targets: nil,
 
           user_message_id: user_message.id,
-          user_images: image_urls_for(user_message)
+          user_images: image_urls_for(user_message),
+          limits: updated_limits
         }, status: :ok
         return
       end
@@ -282,7 +350,8 @@ module V1
           message: "Assistant response unavailable. Please try again.",
           conversation_id: conversation.id,
           user_message_id: user_message.id,
-          user_images: image_urls_for(user_message)
+          user_images: image_urls_for(user_message),
+          limits: limiter.usage_payload
         }, status: :bad_gateway
         return
       end
@@ -308,7 +377,8 @@ module V1
           "steps" => steps,
           "escalate_suggested" => escalate_suggested,
           "confidence" => confidence,
-          "title" => title
+          "title" => title,
+          "access_tier" => tier.to_s
         }
       )
 
@@ -319,6 +389,11 @@ module V1
       }
       update_hash[:summary] = title if title.present?
       conversation.update!(update_hash)
+
+      updated_limits = limiter.increment!(
+        image_count: uploaded_images.length,
+        new_conversation: new_conversation
+      )
 
       render json: {
         conversation_id: conversation.id,
@@ -333,26 +408,142 @@ module V1
         show_contact_panel: false,
         escalation_reason: nil,
         contact_actions: nil,
+        locked_contact_actions: locked_contact_actions_for(limits),
         contact_draft: nil,
         contact_targets: nil,
 
         user_message_id: user_message.id,
-        user_images: image_urls_for(user_message)
+        user_images: image_urls_for(user_message),
+        limits: updated_limits
       }, status: :ok
     end
 
     private
 
     # ----------------------------
+    # Tier / limits
+    # ----------------------------
+    def signed_in_actor_key
+      "user:#{current_user.id}"
+    end
+
+    def signed_in_conversation_key(conversation)
+      "user:#{current_user.id}:conversation:#{conversation.id}"
+    end
+
+    def support_unlocked?(limits)
+      limits[:support_unlocked] == true
+    end
+
+    def contact_actions_for(limits)
+      unlocked = support_unlocked?(limits)
+
+      {
+        sms: unlocked,
+        email: unlocked,
+        call: unlocked
+      }
+    end
+
+    def locked_contact_actions_for(limits)
+      unlocked = support_unlocked?(limits)
+
+      {
+        sms: !unlocked,
+        email: !unlocked,
+        call: !unlocked
+      }
+    end
+
+    def guardrail_settings_for(limits)
+      {
+        max_text_chars: limits[:chars_per_message].to_i,
+        max_user_per_60s: [limits[:burst_messages].to_i * 6, 1].max,
+        max_llm_calls: limits[:messages_per_conversation].to_i,
+        max_llm_calls_high: limits[:messages_per_conversation].to_i,
+        stuck_within_last_user_turns: 10,
+        stuck_min_hits: 3,
+        repeat_within_last_user_turns: 3,
+        repeat_min_matches: 2,
+        show_panel_on_llm_budget: true
+      }
+    end
+
+    def render_limit_error(result, conversation_id: nil)
+      render json: {
+        error: result.error,
+        message: result.message,
+        conversation_id: conversation_id,
+        limits: result.limits
+      }, status: result.status
+    end
+
+    # ----------------------------
+    # Image validation
+    # ----------------------------
+    def validate_uploaded_images(images, limits)
+      max_images = limits[:images_per_message].to_i
+      return { ok: true } if images.blank?
+
+      if images.length > max_images
+        return {
+          ok: false,
+          error: "too_many_images",
+          message: "You can attach up to #{max_images} image(s) per message.",
+          status: :unprocessable_entity
+        }
+      end
+
+      max_bytes =
+        if limits[:support_unlocked]
+          10.megabytes
+        else
+          6.megabytes
+        end
+
+      allowed_types = %w[
+        image/jpeg
+        image/jpg
+        image/png
+        image/webp
+        image/heic
+        image/heif
+      ]
+
+      images.each do |img|
+        content_type = img.respond_to?(:content_type) ? img.content_type.to_s.downcase : ""
+        size = img.respond_to?(:size) ? img.size.to_i : 0
+
+        unless allowed_types.include?(content_type)
+          return {
+            ok: false,
+            error: "invalid_image_type",
+            message: "Please upload a JPG, PNG, WEBP, HEIC, or HEIF image.",
+            status: :unprocessable_entity
+          }
+        end
+
+        if size <= 0 || size > max_bytes
+          return {
+            ok: false,
+            error: "image_too_large",
+            message: "That image is too large. Please upload a smaller screenshot or photo.",
+            status: :payload_too_large
+          }
+        end
+      end
+
+      { ok: true }
+    end
+
+    # ----------------------------
     # Params
     # ----------------------------
     def extract_text_param(p)
-      # If top-level "text" key exists (even blank), honor it.
       if p.key?(:text) || p.key?("text")
         return p[:text].to_s
       end
 
-      # Otherwise try nested ask_mom[text], but don't blow up if missing.
       begin
         p.require(:ask_mom).permit(:text).fetch(:text).to_s
       rescue ActionController::ParameterMissing
@@ -364,8 +555,6 @@ module V1
     # URL host helper
     # ----------------------------
     def url_host
-      # Prefer explicit host if set (recommended for production),
-      # else fall back to request.base_url for local/dev.
       ENV["APP_HOST"].to_s.presence || request.base_url
     end
 
@@ -376,7 +565,6 @@ module V1
       return [] unless message&.images&.attached?
 
       message.images.map do |att|
-        # S3 presigned URL (publicly reachable by OpenAI)
         att.blob.url(
           expires_in: 10.minutes,
           disposition: "inline",
@@ -387,7 +575,6 @@ module V1
       Rails.logger.warn("[AskMomController] image_urls_for failed: #{e.class}: #{e.message}")
       []
     end
-
 
     # ----------------------------
     # Risk + Title
@@ -529,7 +716,6 @@ module V1
           user_text.to_s
         end
 
-      # ✅ Generate signed image URLs and pass them as input_image.image_url
       image_urls = image_urls_for(user_message)
 
       Rails.logger.info("[AskMomController] LLM: model=#{model} ctx_chars=#{ctx.length} sending_images=#{image_urls.length}")

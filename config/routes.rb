@@ -9,6 +9,7 @@ Rails.application.routes.draw do
   patch "password_resets",      to: "password_resets#update"
 
   namespace :v1 do
+    get "public_ask_mom/create"
     namespace :revenuecat do
       post :webhooks, to: "webhooks#create"
     end
@@ -83,6 +84,7 @@ Rails.application.routes.draw do
 
     post "ringcentral/webhook", to: "ringcentral_webhooks#create"
 
+    post "public_ask_mom", to: "public_ask_mom#create"
     post "ask_mom", to: "ask_mom#create"
 
     resources :conversations, only: [:index, :show]
