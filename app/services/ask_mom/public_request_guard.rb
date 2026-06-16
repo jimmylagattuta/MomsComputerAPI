@@ -24,7 +24,7 @@ module AskMom
     end
 
     def initialize(guest_id:, text:, images:)
-      @guest_id = guest_id.to_s
+      @guest_id = guest_id.to_s.strip
       @text = text.to_s
       @images = Array(images).compact
     end
@@ -36,7 +36,7 @@ module AskMom
         return deny("invalid_guest_id", "Invalid guest session.", :bad_request)
       end
 
-      unless @guest_id.match?(/\A[a-zA-Z0-9_\-:.]{8,120}\z/)
+      unless @guest_id.match?(/\Aguest_[0-9a-fA-F\-]{36}\z/)
         return deny("invalid_guest_id", "Invalid guest session.", :bad_request)
       end
 

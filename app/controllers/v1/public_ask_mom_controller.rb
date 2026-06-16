@@ -26,14 +26,19 @@ module V1
 
       limits = AskMom::Limits.for_guest
 
+      # Use a stable server-side digest for cache keys instead of the raw guest_id.
+      # This keeps guest IDs out of cache keys/log-ish places while preserving
+      # the same limit identity for the same device guest ID.
+      guest_key = Digest::SHA256.hexdigest(guest_id)
+
       limiter = AskMom::UsageLimiter.new(
-        actor_key: "guest:#{guest_id}",
+        actor_key: "guest:#{guest_key}",
         tier: :guest,
         limits: limits,
-        conversation_key: "guest:#{guest_id}:public"
+        conversation_key: "guest:#{guest_key}:public"
       )
 
-      new_conversation = first_guest_message_today?(guest_id)
+      new_conversation = first_guest_message_today?(guest_key)
 
       check = limiter.check!(
         text: text,
@@ -100,8 +105,8 @@ module V1
 
     private
 
-    def first_guest_message_today?(guest_id)
-      key = "ask_mom:conversation:#{Date.current.iso8601}:guest:#{guest_id}:public"
+    def first_guest_message_today?(guest_key)
+      key = "ask_mom:conversation:#{Date.current.iso8601}:guest:#{guest_key}:public"
       raw = Rails.cache.read(key)
 
       raw.blank? || raw["messages_used_in_conversation"].to_i <= 0
