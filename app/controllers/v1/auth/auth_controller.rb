@@ -169,6 +169,9 @@ module V1
           last_seen_at: user.last_seen_at,
           phone_verified_at: user.phone_verified_at,
 
+          # ✅ Backend/Rails premium access for the mobile app gate
+          support_subscription_active: support_subscription_active_for(user),
+
           # ✅ Call usage fields for the mobile app settings menu
           current_calls_this_month: call_usage[:current_calls_this_month],
           monthly_call_limit: call_usage[:monthly_call_limit],
@@ -179,6 +182,20 @@ module V1
           call_cycle_start_at: call_usage[:call_cycle_start_at],
           call_cycle_end_at: call_usage[:call_cycle_end_at]
         }
+      end
+
+      def support_subscription_active_for(user)
+        return false unless user
+        return true if admin_user?(user)
+
+        if user.respond_to?(:support_subscription_active?)
+          user.support_subscription_active?
+        else
+          false
+        end
+      rescue => e
+        Rails.logger.error("❌ [AUTH] support_subscription_active_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        false
       end
 
       def call_usage_payload_for(user)
