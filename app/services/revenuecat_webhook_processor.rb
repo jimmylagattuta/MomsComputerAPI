@@ -34,7 +34,12 @@ class RevenuecatWebhookProcessor
   def call
     ActiveRecord::Base.transaction do
       revenuecat_event = create_revenuecat_event!
-      user = revenuecat_event.user
+      customer_link = upsert_customer_link!
+      user = revenuecat_event.user || customer_link&.user
+
+      if user && revenuecat_event.user_id.blank?
+        revenuecat_event.update!(user: user)
+      end
 
       return revenuecat_event unless user
 
@@ -49,9 +54,10 @@ class RevenuecatWebhookProcessor
   private
 
   def create_revenuecat_event!
-    RevenuecatEvent.create!(
-      user: find_user,
-      event_id: event_id,
+    revenuecat_event = RevenuecatEvent.find_or_initialize_by(event_id: event_id)
+
+    revenuecat_event.assign_attributes(
+      user: revenuecat_event.user || find_user,
       event_type: event_type,
       app_user_id: app_user_id,
       product_id: product_id,
@@ -66,6 +72,48 @@ class RevenuecatWebhookProcessor
       expiration_at: expiration_at,
       raw_payload: payload
     )
+
+    revenuecat_event.save!
+    revenuecat_event
+  end
+
+  def upsert_customer_link!
+    return nil if app_user_id.blank?
+
+    link = RevenuecatCustomerLink.find_or_initialize_by(app_user_id: app_user_id)
+
+    resolved_user = find_user
+
+    link.assign_attributes(
+      user: resolved_user || link.user,
+      original_app_user_id: revenuecat_original_app_user_id.presence || link.original_app_user_id,
+      status: customer_link_status(resolved_user || link.user),
+      last_event_id: event_id,
+      last_event_type: event_type,
+      product_id: product_id,
+      entitlement_key: entitlement_key,
+      store: store,
+      environment: environment,
+      expiration_at: expiration_at
+    )
+
+    link.save!
+    link
+  end
+
+  def customer_link_status(user)
+    base =
+      if active_event? || cancel_event?
+        "active"
+      elsif billing_issue_event?
+        "billing_issue"
+      elsif expiration_event?
+        "expired"
+      else
+        "unknown"
+      end
+
+    user.present? ? "linked_#{base}" : "anonymous_#{base}"
   end
 
   def upsert_subscription!(user, revenuecat_event)
@@ -104,6 +152,7 @@ class RevenuecatWebhookProcessor
   def create_subscription_transaction!(user, subscription, revenuecat_event)
     return unless revenue_event?
     return if transaction_id.blank?
+    return if SubscriptionTransaction.exists?(transaction_id: transaction_id)
 
     SubscriptionTransaction.create!(
       user: user,
@@ -142,7 +191,18 @@ class RevenuecatWebhookProcessor
   def find_user
     return nil if app_user_id.blank?
 
-    User.find_by(id: app_user_id)
+    # Signed-in RevenueCat users use our Rails User.id as app_user_id.
+    if app_user_id.to_s.match?(/\A\d+\z/)
+      user = User.find_by(id: app_user_id)
+      return user if user
+    end
+
+    # Anonymous RevenueCat users can be linked later.
+    link =
+      RevenuecatCustomerLink.find_by(app_user_id: app_user_id) ||
+      RevenuecatCustomerLink.find_by(original_app_user_id: revenuecat_original_app_user_id)
+
+    link&.user
   end
 
   def find_plan

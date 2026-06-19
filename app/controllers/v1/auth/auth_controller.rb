@@ -32,6 +32,11 @@ module V1
       def login
         user = User.find_by(email: login_params[:email]&.downcase)
 
+        if user&.deleted?
+          Rails.logger.info("🔒 [AUTH] deleted account login blocked user_id=#{user.id}")
+          return render json: { error: "invalid_credentials" }, status: :unauthorized
+        end
+
         if user&.authenticate(login_params[:password])
           user.update(last_login_at: Time.current, last_seen_at: Time.current)
           user.reload

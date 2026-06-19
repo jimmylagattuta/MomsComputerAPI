@@ -44,6 +44,30 @@ module V1
       }
     end
 
+    def destroy
+      user = current_user
+
+      Rails.logger.info("🧹 [ME] account deletion requested user_id=#{user.id}")
+
+      user.delete_account!
+
+      Rails.logger.info("🧹 [ME] account deleted/anonymized user_id=#{user.id}")
+
+      render json: {
+        ok: true,
+        message: "Your account has been deleted."
+      }
+    rescue => e
+      Rails.logger.error(
+        "❌ [ME] account deletion failed user_id=#{current_user&.id}: #{e.class} - #{e.message}"
+      )
+
+      render json: {
+        error: "account_deletion_failed",
+        message: "We could not delete your account right now. Please try again."
+      }, status: :unprocessable_entity
+    end
+
     private
 
     def support_subscription_active_for(user)

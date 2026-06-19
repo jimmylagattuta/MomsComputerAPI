@@ -10,8 +10,11 @@ Rails.application.routes.draw do
 
   namespace :v1 do
     get "public_ask_mom/create"
+
     namespace :revenuecat do
       post :webhooks, to: "webhooks#create"
+      post :link_customer, to: "customers#link"
+      get  :customer_status, to: "customers#status"
     end
 
     post "devices/register", to: "devices#register"
@@ -63,7 +66,8 @@ Rails.application.routes.draw do
       resources :support_threads, only: [:index, :show]
     end
 
-    get "me", to: "me#show"
+    get    "me", to: "me#show"
+    delete "me", to: "me#destroy"
 
     namespace :auth do
       post "phone/request_code", to: "phone#request_code"

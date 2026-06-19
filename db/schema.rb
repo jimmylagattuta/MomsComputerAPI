@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_05_23_024523) do
+ActiveRecord::Schema[7.2].define(version: 2026_06_18_203210) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -164,6 +164,30 @@ ActiveRecord::Schema[7.2].define(version: 2026_05_23_024523) do
     t.datetime "updated_at", null: false
     t.string "provider_product_id"
     t.index ["provider_product_id"], name: "index_plans_on_provider_product_id", unique: true
+  end
+
+  create_table "revenuecat_customer_links", force: :cascade do |t|
+    t.integer "user_id"
+    t.string "app_user_id", null: false
+    t.string "original_app_user_id"
+    t.string "guest_id"
+    t.string "status", default: "anonymous", null: false
+    t.string "last_event_id"
+    t.string "last_event_type"
+    t.string "product_id"
+    t.string "entitlement_key"
+    t.string "store"
+    t.string "environment"
+    t.datetime "expiration_at"
+    t.datetime "linked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_user_id"], name: "index_revenuecat_customer_links_on_app_user_id", unique: true
+    t.index ["guest_id"], name: "index_revenuecat_customer_links_on_guest_id"
+    t.index ["original_app_user_id"], name: "index_revenuecat_customer_links_on_original_app_user_id"
+    t.index ["status"], name: "index_revenuecat_customer_links_on_status"
+    t.index ["user_id", "app_user_id"], name: "index_revenuecat_customer_links_on_user_id_and_app_user_id"
+    t.index ["user_id"], name: "index_revenuecat_customer_links_on_user_id"
   end
 
   create_table "revenuecat_events", force: :cascade do |t|
@@ -480,6 +504,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_05_23_024523) do
     t.string "phone_verification_pending_phone"
     t.string "password_reset_token_digest"
     t.datetime "password_reset_sent_at"
+    t.datetime "deleted_at"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["password_reset_token_digest"], name: "index_users_on_password_reset_token_digest"
     t.index ["phone"], name: "index_users_on_phone", unique: true
@@ -498,6 +523,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_05_23_024523) do
   add_foreign_key "escalation_tickets", "conversations"
   add_foreign_key "escalation_tickets", "users"
   add_foreign_key "messages", "conversations"
+  add_foreign_key "revenuecat_customer_links", "users"
   add_foreign_key "revenuecat_events", "users"
   add_foreign_key "subscription_transactions", "revenuecat_events"
   add_foreign_key "subscription_transactions", "subscriptions"

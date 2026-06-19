@@ -13,6 +13,7 @@ class User < ApplicationRecord
   has_many :entitlements, dependent: :destroy
   has_many :revenuecat_events, dependent: :nullify
   has_many :subscription_transactions, dependent: :destroy
+  has_many :revenuecat_customer_links, dependent: :nullify
   has_many :consent_records, dependent: :destroy
   has_many :support_call_cycles, dependent: :destroy
   has_many :support_call_sessions, dependent: :destroy
@@ -42,6 +43,42 @@ class User < ApplicationRecord
 
   def admin?
     role == "admin"
+  end
+
+  def deleted?
+    status.to_s == "deleted" || deleted_at.present?
+  end
+
+  def delete_account!
+    now = Time.current
+    deleted_email = "deleted-user-#{id}-#{SecureRandom.hex(8)}@deleted.momscomputer.local"
+    unusable_password = SecureRandom.alphanumeric(32)
+
+    transaction do
+      # Remove registered mobile devices / push tokens so this account can no longer receive app pushes.
+      devices.destroy_all if respond_to?(:devices)
+
+      update!(
+        email: deleted_email,
+        first_name: nil,
+        last_name: nil,
+        phone: nil,
+        preferred_name: nil,
+        preferred_language: nil,
+        timezone: nil,
+        date_of_birth: nil,
+        marketing_opt_in: false,
+        phone_verified_at: nil,
+        password: unusable_password,
+        password_confirmation: unusable_password,
+        password_reset_token_digest: nil,
+        password_reset_sent_at: nil,
+        status: "deleted",
+        deleted_at: now
+      )
+    end
+
+    true
   end
 
   def generate_password_reset_token!
