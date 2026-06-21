@@ -36,18 +36,69 @@ module V1
         original_app_user_id = params[:original_app_user_id].to_s.strip
         guest_id = params[:guest_id].to_s.strip
 
+        rc_debug(
+          "start",
+          user_id: current_user.id,
+          app_user_id: app_user_id.presence,
+          original_app_user_id: original_app_user_id.presence,
+          guest_id: guest_id.presence
+        )
+
         link = find_link(
           app_user_id: app_user_id,
           original_app_user_id: original_app_user_id,
           guest_id: guest_id
         )
 
+        rc_debug(
+          "link_lookup",
+          found: link.present?,
+          link_id: link&.id,
+          link_user_id: link&.user_id,
+          status: link&.status,
+          app_user_id: link&.app_user_id,
+          original_app_user_id: link&.original_app_user_id,
+          guest_id: link&.guest_id,
+          last_event_id: link.respond_to?(:last_event_id) ? link.last_event_id : nil
+        )
+
+        # Launch-safe fallback:
+        # If the RevenueCat webhook/customer-link row was not created yet,
+        # do not fail the account setup flow. Create the link from the provided
+        # anonymous RevenueCat app_user_id and attach it to the current user.
+        link ||= build_missing_link!(
+          app_user_id: app_user_id,
+          original_app_user_id: original_app_user_id,
+          guest_id: guest_id,
+          user: current_user
+        )
+
         unless link
+          rc_debug(
+            "finish",
+            linked: false,
+            error: "missing_revenuecat_customer_identifier",
+            subscription_active: current_user.support_subscription_active?
+          )
+
           return render json: {
-            error: "revenuecat_customer_not_found",
-            message: "We could not find the guest subscription to link."
-          }, status: :not_found
+            error: "missing_revenuecat_customer_identifier",
+            message: "No RevenueCat customer identifier was provided."
+          }, status: :unprocessable_entity
         end
+
+        rc_debug(
+          "link_ready",
+          link_id: link.id,
+          link_user_id: link.user_id,
+          status: link.status,
+          app_user_id: link.app_user_id,
+          original_app_user_id: link.original_app_user_id,
+          guest_id: link.guest_id,
+          active_link: active_link?(link)
+        )
+
+        replayed_event = nil
 
         ActiveRecord::Base.transaction do
           link.update!(
@@ -56,19 +107,61 @@ module V1
             linked_at: Time.current
           )
 
-          attach_latest_revenuecat_event_to_user!(link, current_user)
+          rc_debug(
+            "link_attached_to_user",
+            link_id: link.id,
+            user_id: current_user.id,
+            status: link.status
+          )
+
+          replayed_event = attach_latest_revenuecat_event_to_user!(link, current_user)
+
+          # If the replay created/updated subscription records, re-check link status.
+          current_user.reload
+
+          subscription_active_after_replay = current_user.support_subscription_active?
+
+          link.update!(
+            status: subscription_active_after_replay ? "linked_active" : link.status
+          )
+
+          rc_debug(
+            "link_status_after_replay",
+            link_id: link.id,
+            status: link.status,
+            subscription_active: subscription_active_after_replay
+          )
         end
 
         current_user.reload
 
+        subscription_active = current_user.support_subscription_active?
+
+        rc_debug(
+          "finish",
+          linked: true,
+          replayed: replayed_event.present?,
+          link_created_without_existing_webhook: replayed_event.blank?,
+          subscription_active: subscription_active
+        )
+
         render json: {
           linked: true,
-          subscription_active: current_user.support_subscription_active?,
+          link_created_without_existing_webhook: replayed_event.blank?,
+          replayed_revenuecat_event: replayed_event.present?,
+          subscription_active: subscription_active,
           user: user_payload(current_user)
         }
       end
 
       private
+
+      def rc_debug(message, data = {})
+        return unless ENV["DEBUG_RC_LINK"] == "true"
+
+        clean_data = data.compact.map { |key, value| "#{key}=#{value.inspect}" }.join(" ")
+        Rails.logger.info("[RC_LINK] #{message} #{clean_data}".strip)
+      end
 
       def find_link(app_user_id:, original_app_user_id:, guest_id:)
         if app_user_id.present?
@@ -78,6 +171,93 @@ module V1
         elsif guest_id.present?
           RevenuecatCustomerLink.find_by(guest_id: guest_id)
         end
+      end
+
+      def build_missing_link!(app_user_id:, original_app_user_id:, guest_id:, user:)
+        usable_app_user_id = app_user_id.presence || original_app_user_id.presence
+
+        if usable_app_user_id.blank? && guest_id.blank?
+          rc_debug(
+            "missing_link_build_skipped",
+            reason: "no_customer_identifier",
+            user_id: user&.id
+          )
+
+          return nil
+        end
+
+        latest_event = latest_revenuecat_event_for(
+          app_user_id: usable_app_user_id,
+          original_app_user_id: original_app_user_id
+        )
+
+        rc_debug(
+          "missing_link_latest_event_lookup",
+          found: latest_event.present?,
+          revenuecat_event_id: latest_event&.id,
+          event_id: latest_event&.event_id,
+          event_type: latest_event&.event_type,
+          event_app_user_id: latest_event&.app_user_id,
+          event_original_app_user_id: latest_event&.original_app_user_id,
+          event_user_id: latest_event&.user_id
+        )
+
+        event_payload = latest_event&.raw_payload || {}
+        event_body = event_payload["event"] || {}
+
+        expiration_at = parse_time(
+          event_body["expiration_at_ms"] ||
+            event_body["expiration_at"] ||
+            event_body["expires_at"] ||
+            event_body["expiration_date"]
+        )
+
+        product_id =
+          event_body["product_id"].presence ||
+          event_body["product_identifier"].presence ||
+          event_body["store_product_id"].presence
+
+        entitlement_key =
+          event_body["entitlement_id"].presence ||
+          event_body["entitlement_identifier"].presence ||
+          event_body["entitlement"].presence
+
+        status =
+          if latest_event.present?
+            expiration_at.blank? || expiration_at.future? ? "linked_active" : "linked_inactive"
+          else
+            # We do not know backend subscription status yet, but the frontend
+            # only sends this after RevenueCat saw an anonymous customer. Keep it
+            # linked, then replay if an event exists.
+            "linked_inactive"
+          end
+
+        link = RevenuecatCustomerLink.create!(
+          app_user_id: usable_app_user_id,
+          original_app_user_id: original_app_user_id.presence,
+          guest_id: guest_id.presence,
+          user: user,
+          status: status,
+          product_id: product_id,
+          entitlement_key: entitlement_key,
+          expiration_at: expiration_at,
+          linked_at: Time.current
+        )
+
+        rc_debug(
+          "missing_link_created",
+          link_id: link.id,
+          user_id: user&.id,
+          status: link.status,
+          app_user_id: link.app_user_id,
+          original_app_user_id: link.original_app_user_id,
+          guest_id: link.guest_id,
+          product_id: link.product_id,
+          entitlement_key: link.entitlement_key,
+          expiration_at: link.expiration_at
+        )
+
+        link
       end
 
       def active_link?(link)
@@ -96,14 +276,56 @@ module V1
           (link.expiration_at.blank? || link.expiration_at.future?)
       end
 
+      def latest_revenuecat_event_for(app_user_id:, original_app_user_id:)
+        ids = [app_user_id, original_app_user_id].compact_blank.uniq
+        return nil if ids.blank?
+
+        RevenuecatEvent
+          .where(app_user_id: ids)
+          .order(created_at: :desc)
+          .first
+      end
+
       def attach_latest_revenuecat_event_to_user!(link, user)
         event =
-          RevenuecatEvent
-            .where(app_user_id: [link.app_user_id, link.original_app_user_id].compact)
-            .order(created_at: :desc)
-            .first
+          latest_revenuecat_event_for(
+            app_user_id: link.app_user_id,
+            original_app_user_id: link.original_app_user_id
+          )
 
-        return unless event
+        rc_debug(
+          "latest_event_lookup",
+          found: event.present?,
+          revenuecat_event_id: event&.id,
+          event_id: event&.event_id,
+          event_type: event&.event_type,
+          event_app_user_id: event&.app_user_id,
+          event_original_app_user_id: event&.original_app_user_id,
+          event_user_id: event&.user_id
+        )
+
+        unless event
+          rc_debug(
+            "replay_result",
+            replayed: false,
+            reason: "no_revenuecat_event_found",
+            app_user_id: link.app_user_id,
+            original_app_user_id: link.original_app_user_id,
+            user_id: user&.id,
+            subscription_active: user.reload.support_subscription_active?
+          )
+
+          return nil
+        end
+
+        rc_debug(
+          "replay_start",
+          revenuecat_event_id: event.id,
+          event_id: event.event_id,
+          event_type: event.event_type,
+          existing_event_user_id: event.user_id,
+          attaching_to_user_id: user.id
+        )
 
         event.update!(user: user) if event.user_id.blank?
 
@@ -111,6 +333,42 @@ module V1
           payload: event.raw_payload,
           event: event.raw_payload["event"] || {}
         ).call
+
+        rc_debug(
+          "replay_result",
+          replayed: true,
+          revenuecat_event_id: event.id,
+          event_id: event.event_id,
+          event_type: event.event_type,
+          event_user_id: event.reload.user_id,
+          subscription_active: user.reload.support_subscription_active?
+        )
+
+        event
+      end
+
+      def parse_time(value)
+        return nil if value.blank?
+
+        if value.is_a?(Numeric)
+          # RevenueCat timestamps are often milliseconds.
+          timestamp = value.to_i
+          timestamp = timestamp / 1000 if timestamp > 10_000_000_000
+          return Time.zone.at(timestamp)
+        end
+
+        str = value.to_s.strip
+        return nil if str.blank?
+
+        if str.match?(/\A\d+\z/)
+          timestamp = str.to_i
+          timestamp = timestamp / 1000 if timestamp > 10_000_000_000
+          return Time.zone.at(timestamp)
+        end
+
+        Time.zone.parse(str)
+      rescue
+        nil
       end
 
       def user_payload(user)

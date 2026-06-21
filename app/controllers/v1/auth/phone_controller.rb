@@ -19,7 +19,7 @@ module V1
         end
 
         sent_at = Rails.cache.read(sent_at_key(phone))
-        Rails.logger.info("🗄️ [PhoneController] Existing sent_at for #{phone}: #{sent_at.inspect}")
+        phone_debug("Existing sent_at", phone: phone, sent_at: sent_at)
 
         if sent_at.present? && Time.parse(sent_at.to_s) > RESEND_WINDOW.ago
           cooldown_remaining = [(Time.parse(sent_at.to_s) + RESEND_WINDOW - Time.current).ceil, 1].max
@@ -37,15 +37,15 @@ module V1
         stored_sent_at_after_write = Rails.cache.read(sent_at_key(phone))
         stored_attempts_after_write = Rails.cache.read(attempts_key(phone))
 
-        Rails.logger.info("📨 [PhoneController] Requesting verification code for #{phone}")
-        Rails.logger.info("🗄️ [PhoneController] Cache store class: #{Rails.cache.class.name}")
-        Rails.logger.info("🗄️ [PhoneController] Stored sent_at after write: #{stored_sent_at_after_write.inspect}")
-        Rails.logger.info("🗄️ [PhoneController] Stored attempts after write: #{stored_attempts_after_write.inspect}")
+        phone_debug("Requesting verification code", phone: phone)
+        phone_debug("Cache store", class_name: Rails.cache.class.name)
+        phone_debug("Stored sent_at after write", phone: phone, sent_at: stored_sent_at_after_write)
+        phone_debug("Stored attempts after write", phone: phone, attempts: stored_attempts_after_write)
 
         verification = TwilioService.send_verification_code(to: phone)
 
-        Rails.logger.info("✅ [PhoneController] Verification code sent to #{phone}")
-        Rails.logger.info("✅ [PhoneController] Twilio Verify SID=#{verification.sid} status=#{verification.status}")
+        phone_debug("Verification code sent", phone: phone)
+        phone_debug("Twilio Verify send result", sid: verification.sid, status: verification.status)
 
         render json: {
           ok: true,
@@ -69,22 +69,28 @@ module V1
         stored_sent_at = Rails.cache.read(sent_at_key(phone))
         attempts = Rails.cache.read(attempts_key(phone)).to_i
 
-        Rails.logger.info("🗄️ [PhoneController] Verify cache store class: #{Rails.cache.class.name}")
-        Rails.logger.info("🗄️ [PhoneController] Verify stored sent_at for #{phone}: #{stored_sent_at.inspect}")
-        Rails.logger.info("🗄️ [PhoneController] Verify attempts for #{phone}: #{attempts.inspect}")
-        Rails.logger.info("🧪 [PhoneController] Submitted code for #{phone}: #{code}") if Rails.env.development?
+        phone_debug("Verify cache store", class_name: Rails.cache.class.name)
+        phone_debug("Verify stored sent_at", phone: phone, sent_at: stored_sent_at)
+        phone_debug("Verify attempts", phone: phone, attempts: attempts)
+        phone_debug("Submitted code", phone: phone, code: code) if Rails.env.development?
 
         return render json: { error: "verification_code_expired" }, status: :unprocessable_entity if stored_sent_at.blank?
         return render json: { error: "verification_code_expired" }, status: :unprocessable_entity if attempts >= MAX_ATTEMPTS
 
         verification_check = TwilioService.check_verification_code(to: phone, code: code)
 
-        Rails.logger.info("🔍 [PhoneController] Twilio Verify check SID=#{verification_check.sid} status=#{verification_check.status}")
+        phone_debug(
+          "Twilio Verify check result",
+          sid: verification_check.sid,
+          status: verification_check.status
+        )
 
         unless verification_check.status == "approved"
           attempts += 1
           Rails.cache.write(attempts_key(phone), attempts, expires_in: CODE_TTL)
-          Rails.logger.info("❌ [PhoneController] Invalid code for #{phone}; attempts now #{attempts}")
+
+          phone_debug("Invalid code", phone: phone, attempts: attempts)
+
           return render json: { error: "verification_code_invalid" }, status: :unprocessable_entity
         end
 
@@ -94,7 +100,7 @@ module V1
         Rails.cache.delete(sent_at_key(phone))
         Rails.cache.delete(attempts_key(phone))
 
-        Rails.logger.info("✅ [PhoneController] Verification succeeded for #{phone}")
+        phone_debug("Verification succeeded", phone: phone)
 
         render json: {
           ok: true,
@@ -107,6 +113,13 @@ module V1
       end
 
       private
+
+      def phone_debug(message, data = {})
+        return unless ENV["DEBUG_PHONE"] == "true"
+
+        clean_data = data.compact.map { |key, value| "#{key}=#{value.inspect}" }.join(" ")
+        Rails.logger.info("[PhoneController] #{message} #{clean_data}".strip)
+      end
 
       def normalize_phone(value)
         digits = value.to_s.gsub(/\D/, "")

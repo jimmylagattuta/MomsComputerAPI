@@ -8,9 +8,27 @@ module V1
       DEFAULT_MONTHLY_CALL_LIMIT = 3
 
       def signup
-        user = User.new(signup_params)
+        permitted = signup_params
+        phone_verification_token = permitted.delete(:phone_verification_token)
+
+        unless valid_phone_verification_token?(
+          token: phone_verification_token,
+          phone: permitted[:phone]
+        )
+          Rails.logger.info(
+            "📱 [AUTH] signup blocked: missing/invalid phone verification token phone=#{permitted[:phone].inspect} email=#{permitted[:email].inspect}"
+          )
+
+          return render json: {
+            error: "phone_verification_required",
+            details: ["Phone verification is required"]
+          }, status: :unprocessable_entity
+        end
+
+        user = User.new(permitted)
         user.role ||= "senior"
         user.status ||= "active"
+        user.phone_verified_at = Time.current
 
         if user.save
           begin
@@ -128,10 +146,14 @@ module V1
           :first_name,
           :last_name,
           :phone,
+          :phone_verification_token,
           :preferred_name,
           :preferred_language,
           :timezone
-        ).tap { |p| p[:email] = p[:email].to_s.downcase }
+        ).tap do |p|
+          p[:email] = p[:email].to_s.downcase
+          p[:phone] = normalize_phone_for_signup(p[:phone]) if p[:phone].present?
+        end
       end
 
       def login_params
@@ -189,6 +211,42 @@ module V1
         }
       end
 
+      def phone_verification_verifier
+        Rails.application.message_verifier("phone_verification")
+      end
+
+      def valid_phone_verification_token?(token:, phone:)
+        return false if token.blank?
+        return false if phone.blank?
+
+        data = phone_verification_verifier.verify(token)
+
+        return false unless data.is_a?(Hash)
+
+        token_phone = data[:phone] || data["phone"]
+        token_purpose = data[:purpose] || data["purpose"]
+        token_exp = data[:exp] || data["exp"]
+
+        return false unless token_purpose.to_s == "phone_verification"
+        return false unless token_phone.to_s == phone.to_s
+        return false if token_exp.to_i <= Time.current.to_i
+
+        true
+      rescue ActiveSupport::MessageVerifier::InvalidSignature
+        false
+      rescue => e
+        Rails.logger.error("❌ [AUTH] phone verification token check failed: #{e.class} - #{e.message}")
+        false
+      end
+
+      def normalize_phone_for_signup(value)
+        digits = value.to_s.gsub(/\D/, "")
+        digits = digits[1..] if digits.length == 11 && digits.start_with?("1")
+        return value if digits.length != 10
+
+        "+1#{digits}"
+      end
+
       def support_subscription_active_for(user)
         return false unless user
         return true if admin_user?(user)
@@ -226,9 +284,11 @@ module V1
 
         calls_left = [calls_allowed - calls_used, 0].max
 
-        Rails.logger.info(
-          "📞 [AUTH] call usage payload user_id=#{user.id} cycle_id=#{active_cycle&.id} calls_used=#{calls_used} calls_allowed=#{calls_allowed} calls_left=#{calls_left}"
-        )
+        if ENV["DEBUG_AUTH_USAGE"] == "true"
+          Rails.logger.info(
+            "📞 [AUTH] call usage payload user_id=#{user.id} cycle_id=#{active_cycle&.id} calls_used=#{calls_used} calls_allowed=#{calls_allowed} calls_left=#{calls_left}"
+          )
+        end
 
         {
           current_calls_this_month: calls_used,
