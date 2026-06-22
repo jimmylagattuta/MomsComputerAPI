@@ -13,8 +13,20 @@ Rails.application.routes.draw do
 
     namespace :revenuecat do
       post :webhooks, to: "webhooks#create"
+
+      # Existing authenticated RevenueCat customer link/status routes
       post :link_customer, to: "customers#link"
       get  :customer_status, to: "customers#status"
+
+      # New guest RevenueCat customer routes
+      #
+      # remember_guest_customer:
+      # Logged-out app saves guest_install_id + anonymous RevenueCat app_user_id.
+      #
+      # attach_guest_customer:
+      # After signup/login, authenticated user attaches the saved guest customer.
+      post :remember_guest_customer, to: "guest_customers#remember"
+      post :attach_guest_customer,   to: "guest_customers#attach"
     end
 
     post "devices/register", to: "devices#register"
