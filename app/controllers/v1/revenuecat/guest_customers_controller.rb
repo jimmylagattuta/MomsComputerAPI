@@ -3,7 +3,10 @@
 module V1
   module Revenuecat
     class GuestCustomersController < ApplicationController
+      include JwtAuth
+
       skip_before_action :authenticate_user!, only: [:remember], raise: false
+      before_action :authenticate_user!, only: [:attach]
 
       # POST /v1/revenuecat/remember_guest_customer
       #
