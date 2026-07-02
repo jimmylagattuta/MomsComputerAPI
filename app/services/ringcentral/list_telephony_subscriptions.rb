@@ -46,7 +46,7 @@ module Ringcentral
           expiration_time: record["expirationTime"],
           creation_time: record["creationTime"],
           matches_expected_webhook: delivery_mode["address"] == WEBHOOK_URL,
-          matches_telephony_sessions: (event_filters & EVENT_FILTERS).any?,
+          matches_telephony_sessions: telephony_sessions_filter?(event_filters),
           raw: record
         }
       end
@@ -101,6 +101,14 @@ module Ringcentral
         error_class: e.class.name,
         error_message: e.message
       }
+    end
+
+    private
+
+    def telephony_sessions_filter?(event_filters)
+      event_filters.any? do |event_filter|
+        event_filter.to_s.match?(%r{\A/restapi/v1\.0/account/[^/]+/telephony/sessions\z})
+      end
     end
   end
 end
