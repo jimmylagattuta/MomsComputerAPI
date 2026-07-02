@@ -11,6 +11,12 @@
 
       sessions.find_each do |session|
         begin
+          if session.newer_answered_reconnect_exists?
+            session.update!(failure_reason: "superseded_by_newer_answered_reconnect")
+            skipped << session.id
+            next
+          end
+
           result = SupportCalls::FinalizeAnsweredCallJob.perform_now(session.id)
 
           if result
@@ -56,11 +62,11 @@
       SupportCallSession
         .where(status: "completed")
         .where(chargeable: false, charged_at: nil)
+        .where(failure_reason: nil)
         .where.not(answered_at: nil)
         .where.not(ended_at: nil)
         .where.not(buffer_expires_at: nil)
         .where("buffer_expires_at <= ?", Time.current)
-        .order(buffer_expires_at: :asc)
     end
   end
 end
