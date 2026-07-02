@@ -7,7 +7,8 @@ module Ringcentral
       "allowed_pending_forward",
       "reconnect_buffer",
       "forwarded",
-      "in_progress"
+      "in_progress",
+      "completed"
     ].freeze
 
     def self.call(event)
@@ -37,10 +38,7 @@ module Ringcentral
       return skip!("missing_party_id") if event.party_id.blank?
       return skip!("missing_caller_phone") if event.caller_phone.blank?
 
-      existing_session = SupportCallSession.find_by(
-        ringcentral_telephony_session_id: event.telephony_session_id,
-        ringcentral_party_id: event.party_id
-      )
+      existing_session = find_existing_session
 
       if existing_session.present?
         update_existing_session_from_event!(existing_session)
@@ -94,22 +92,43 @@ module Ringcentral
 
       create_allowed_passthrough_session!(user, cycle)
       processed!("allowed_passthrough_known_user")
+    rescue ActiveRecord::RecordInvalid => e
+      # RingCentral can deliver duplicate Setup/Proceeding events very close together,
+      # especially if duplicate subscriptions exist. If another event already created
+      # the session, treat this event as an idempotent update instead of a hard failure.
+      existing_session = find_existing_session
+
+      if existing_session.present?
+        update_existing_session_from_event!(existing_session)
+        return processed!("existing_session_updated_after_duplicate_create")
+      end
+
+      handle_error(e)
     rescue => e
-      Rails.logger.error("[RingCentral Processor] FAILED event_id=#{event.id} #{e.class}: #{e.message}")
-      Rails.logger.error(e.backtrace.first(10).join("\n"))
-
-      event.update!(
-        processed: true,
-        processed_at: Time.current,
-        processing_result: "error_#{e.class.name}"
-      )
-
-      false
+      handle_error(e)
     end
 
     private
 
     attr_reader :event
+
+    def find_existing_session
+      return nil if event.telephony_session_id.blank?
+
+      exact_match =
+        if event.party_id.present?
+          SupportCallSession.find_by(
+            ringcentral_telephony_session_id: event.telephony_session_id,
+            ringcentral_party_id: event.party_id
+          )
+        end
+
+      exact_match ||
+        SupportCallSession
+          .where(ringcentral_telephony_session_id: event.telephony_session_id)
+          .order(created_at: :asc)
+          .first
+    end
 
     def find_user_by_phone(phone)
       normalized = phone.to_s.strip
@@ -174,6 +193,18 @@ module Ringcentral
         return skip!("answered_session_already_charged")
       end
 
+      if session.answered_at.present?
+        session.update!(ringcentral_status: event.status)
+
+        Rails.logger.info(
+          "[RingCentral Processor] answered duplicate ignored " \
+          "event_id=#{event.id} session_id=#{session.id} " \
+          "user_id=#{session.user_id} answered_at=#{session.answered_at}"
+        )
+
+        return processed!("answered_already_marked")
+      end
+
       session.mark_answered!(ringcentral_status: event.status)
 
       Rails.logger.info(
@@ -218,6 +249,16 @@ module Ringcentral
         )
 
         return processed!("disconnected_already_charged")
+      end
+
+      if session.buffer_expires_at.present?
+        Rails.logger.info(
+          "[RingCentral Processor] disconnected duplicate ignored; reconnect buffer already exists " \
+          "event_id=#{event.id} session_id=#{session.id} " \
+          "buffer_expires_at=#{session.buffer_expires_at}"
+        )
+
+        return processed!("disconnected_already_has_reconnect_buffer")
       end
 
       session.mark_ended_and_start_reconnect_buffer!(ringcentral_status: event.status)
@@ -374,6 +415,19 @@ module Ringcentral
       )
 
       Rails.logger.info("[RingCentral Processor] skipped event_id=#{event.id} reason=#{reason}")
+      false
+    end
+
+    def handle_error(error)
+      Rails.logger.error("[RingCentral Processor] FAILED event_id=#{event.id} #{error.class}: #{error.message}")
+      Rails.logger.error(error.backtrace.first(10).join("\n")) if error.backtrace.present?
+
+      event.update!(
+        processed: true,
+        processed_at: Time.current,
+        processing_result: "error_#{error.class.name}"
+      )
+
       false
     end
   end
