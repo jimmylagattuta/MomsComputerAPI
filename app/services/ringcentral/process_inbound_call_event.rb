@@ -47,10 +47,14 @@ module Ringcentral
 
       user = find_user_by_phone(event.caller_phone)
 
-      # Public office callers are not app users.
-      # Unknown numbers should pass through to normal RingCentral routing.
+      # Direct-dial support calls should only reach support when the caller is
+      # a known, active, phone-verified, subscribed app user.
+      #
+      # Unknown callers should not bypass the app by dialing the RingCentral
+      # number directly.
       unless user.present?
-        return passthrough_without_session!("unknown_phone")
+        enforcement_result = enforce_blocked_call!
+        return blocked_without_session!("unknown_phone", enforcement_result)
       end
 
       unless user.status == "active"
@@ -61,6 +65,11 @@ module Ringcentral
       unless user.phone_verified_at.present?
         enforcement_result = enforce_blocked_call!
         return blocked_without_session!("phone_not_verified", enforcement_result)
+      end
+
+      unless user.support_subscription_active?
+        enforcement_result = enforce_blocked_call!
+        return blocked_without_session!("not_subscribed", enforcement_result)
       end
 
       cycle = current_call_cycle_for(user)
