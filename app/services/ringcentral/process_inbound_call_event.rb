@@ -2,12 +2,14 @@ module Ringcentral
   class ProcessInboundCallEvent
     ACTIONABLE_STATUSES = ["Setup", "Proceeding"].freeze
 
-    # Comma-separated Heroku config:
-    # RINGCENTRAL_ALWAYS_ALLOWED_CALLERS="+18002810692,+13106637276"
+    # Calls placed TO these destination numbers bypass all app-user,
+    # subscription, verification, and monthly-call-limit enforcement.
     #
-    # The main office number is included as a safe default so it cannot
-    # accidentally be treated as an unknown app caller.
-    DEFAULT_ALWAYS_ALLOWED_CALLERS = ["+18002810692"].freeze
+    # Additional destinations can be configured in Heroku as a
+    # comma-separated list:
+    #
+    # RINGCENTRAL_ALWAYS_ALLOWED_DESTINATIONS="+18002810692"
+    DEFAULT_ALWAYS_ALLOWED_DESTINATIONS = ["+18002810692"].freeze
 
     ANSWERABLE_SESSION_STATUSES = [
       "allowed_passthrough",
@@ -45,18 +47,23 @@ module Ringcentral
       return skip!("missing_party_id") if event.party_id.blank?
       return skip!("missing_caller_phone") if event.caller_phone.blank?
 
-      # Trusted business/administrative numbers must always pass through.
-      # They are not app users and must never be disconnected as unknown callers,
-      # consume support-call credits, or create support-call sessions.
-      if always_allowed_caller?(event.caller_phone)
+      # The main Mom's Computer company number is a public destination.
+      # Anyone calling this number should pass through normally.
+      #
+      # This checks event.to_phone, not event.caller_phone:
+      #
+      # caller_phone = the person placing the call
+      # to_phone     = the RingCentral number they called
+      if always_allowed_destination?(event.to_phone)
         Rails.logger.info(
-          "[RingCentral Processor] always-allowed caller bypass " \
+          "[RingCentral Processor] always-allowed destination bypass " \
           "event_id=#{event.id} " \
           "caller_phone=#{event.caller_phone} " \
-          "normalized_caller_phone=#{normalize_phone(event.caller_phone)}"
+          "to_phone=#{event.to_phone} " \
+          "normalized_to_phone=#{normalize_phone(event.to_phone)}"
         )
 
-        return passthrough_without_session!("always_allowed_caller")
+        return passthrough_without_session!("always_allowed_destination")
       end
 
       existing_session = find_existing_session
@@ -68,11 +75,11 @@ module Ringcentral
 
       user = find_user_by_phone(event.caller_phone)
 
-      # Direct-dial support calls should only reach support when the caller is
-      # a known, active, phone-verified, subscribed app user.
+      # Calls to the separate app/support number should only reach support when
+      # the caller is a known, active, phone-verified, subscribed app user.
       #
-      # Unknown callers should not bypass the app by dialing the RingCentral
-      # number directly.
+      # Unknown callers should not bypass the app by dialing the restricted
+      # support number directly.
       unless user.present?
         enforcement_result = enforce_blocked_call!
         return blocked_without_session!("unknown_phone", enforcement_result)
@@ -104,11 +111,21 @@ module Ringcentral
         active_buffer_session = active_reconnect_buffer_session_for(user)
 
         if active_buffer_session.present?
-          create_reconnect_buffer_session!(user, cycle, active_buffer_session)
+          create_reconnect_buffer_session!(
+            user,
+            cycle,
+            active_buffer_session
+          )
+
           return processed!("allowed_reconnect_buffer")
         end
 
-        session = create_blocked_session!(user, cycle, "no_calls_remaining")
+        session = create_blocked_session!(
+          user,
+          cycle,
+          "no_calls_remaining"
+        )
+
         enforcement_result = enforce_blocked_call!
 
         session.update!(
@@ -133,9 +150,10 @@ module Ringcentral
       processed!("allowed_passthrough_known_user")
     rescue ActiveRecord::RecordInvalid => e
       # RingCentral can deliver duplicate Setup/Proceeding events very close
-      # together, especially if duplicate subscriptions exist. If another event
-      # already created the session, treat this event as an idempotent update
-      # instead of a hard failure.
+      # together, especially if duplicate subscriptions exist.
+      #
+      # If another event already created the session, treat this event as an
+      # idempotent update rather than a hard failure.
       existing_session = find_existing_session
 
       if existing_session.present?
@@ -152,35 +170,36 @@ module Ringcentral
 
     attr_reader :event
 
-    def always_allowed_caller?(phone)
-      normalized_caller = normalize_phone(phone)
-      return false if normalized_caller.blank?
+    def always_allowed_destination?(phone)
+      normalized_destination = normalize_phone(phone)
+      return false if normalized_destination.blank?
 
-      always_allowed_callers.include?(normalized_caller)
+      always_allowed_destinations.include?(normalized_destination)
     end
 
-    def always_allowed_callers
-      @always_allowed_callers ||= begin
+    def always_allowed_destinations
+      @always_allowed_destinations ||= begin
         configured_numbers =
-          ENV.fetch("RINGCENTRAL_ALWAYS_ALLOWED_CALLERS", "")
+          ENV.fetch("RINGCENTRAL_ALWAYS_ALLOWED_DESTINATIONS", "")
              .split(",")
              .map(&:strip)
              .reject(&:blank?)
 
-        (DEFAULT_ALWAYS_ALLOWED_CALLERS + configured_numbers)
+        (DEFAULT_ALWAYS_ALLOWED_DESTINATIONS + configured_numbers)
           .map { |phone| normalize_phone(phone) }
           .reject(&:blank?)
           .uniq
       end
     end
 
-    # Normalizes common US phone-number formats to E.164-style values.
+    # Normalizes common US phone-number formats into E.164-style values.
     #
     # Examples:
-    #   (800) 281-0692  -> +18002810692
-    #   8002810692      -> +18002810692
-    #   18002810692     -> +18002810692
-    #   +18002810692    -> +18002810692
+    #
+    # (800) 281-0692 -> +18002810692
+    # 8002810692     -> +18002810692
+    # 18002810692    -> +18002810692
+    # +18002810692   -> +18002810692
     def normalize_phone(phone)
       digits = phone.to_s.gsub(/\D/, "")
       return nil if digits.blank?
@@ -200,14 +219,19 @@ module Ringcentral
       exact_match =
         if event.party_id.present?
           SupportCallSession.find_by(
-            ringcentral_telephony_session_id: event.telephony_session_id,
-            ringcentral_party_id: event.party_id
+            ringcentral_telephony_session_id:
+              event.telephony_session_id,
+            ringcentral_party_id:
+              event.party_id
           )
         end
 
       exact_match ||
         SupportCallSession
-          .where(ringcentral_telephony_session_id: event.telephony_session_id)
+          .where(
+            ringcentral_telephony_session_id:
+              event.telephony_session_id
+          )
           .order(created_at: :asc)
           .first
     end
@@ -232,11 +256,13 @@ module Ringcentral
     end
 
     def current_call_cycle_for(user)
+      now = Time.current
+
       user.support_call_cycles
         .where(
           "cycle_start_at <= ? AND cycle_end_at >= ?",
-          Time.current,
-          Time.current
+          now,
+          now
         )
         .order(cycle_start_at: :desc)
         .first
@@ -251,15 +277,21 @@ module Ringcentral
 
     def update_existing_session_from_event!(session)
       session.update!(
-        ringcentral_status: event.status,
-        caller_phone: event.caller_phone.presence || session.caller_phone,
-        to_phone: event.to_phone.presence || session.to_phone,
+        ringcentral_status:
+          event.status,
+        caller_phone:
+          event.caller_phone.presence || session.caller_phone,
+        to_phone:
+          event.to_phone.presence || session.to_phone,
         ringcentral_extension_id:
-          event.extension_id.presence || session.ringcentral_extension_id,
+          event.extension_id.presence ||
+            session.ringcentral_extension_id,
         ringcentral_to_name:
-          event.to_name.presence || session.ringcentral_to_name,
+          event.to_name.presence ||
+            session.ringcentral_to_name,
         ringcentral_raw_payload:
-          event.raw_payload.presence || session.ringcentral_raw_payload
+          event.raw_payload.presence ||
+            session.ringcentral_raw_payload
       )
     end
 
@@ -268,11 +300,15 @@ module Ringcentral
         return skip!("answered_missing_telephony_session_id")
       end
 
-      session = SupportCallSession
-        .where(ringcentral_telephony_session_id: event.telephony_session_id)
-        .where(status: ANSWERABLE_SESSION_STATUSES)
-        .order(created_at: :asc)
-        .first
+      session =
+        SupportCallSession
+          .where(
+            ringcentral_telephony_session_id:
+              event.telephony_session_id
+          )
+          .where(status: ANSWERABLE_SESSION_STATUSES)
+          .order(created_at: :asc)
+          .first
 
       unless session.present?
         return skip!("answered_no_matching_allowed_session")
@@ -287,23 +323,31 @@ module Ringcentral
       end
 
       if session.answered_at.present?
-        session.update!(ringcentral_status: event.status)
+        session.update!(
+          ringcentral_status: event.status
+        )
 
         Rails.logger.info(
           "[RingCentral Processor] answered duplicate ignored " \
-          "event_id=#{event.id} session_id=#{session.id} " \
-          "user_id=#{session.user_id} answered_at=#{session.answered_at}"
+          "event_id=#{event.id} " \
+          "session_id=#{session.id} " \
+          "user_id=#{session.user_id} " \
+          "answered_at=#{session.answered_at}"
         )
 
         return processed!("answered_already_marked")
       end
 
-      session.mark_answered!(ringcentral_status: event.status)
+      session.mark_answered!(
+        ringcentral_status: event.status
+      )
 
       Rails.logger.info(
         "[RingCentral Processor] marked session answered without charging " \
-        "event_id=#{event.id} session_id=#{session.id} " \
-        "user_id=#{session.user_id} answered_at=#{session.answered_at}"
+        "event_id=#{event.id} " \
+        "session_id=#{session.id} " \
+        "user_id=#{session.user_id} " \
+        "answered_at=#{session.answered_at}"
       )
 
       processed!("answered_marked_pending_disconnect")
@@ -314,10 +358,14 @@ module Ringcentral
         return skip!("disconnected_missing_telephony_session_id")
       end
 
-      session = SupportCallSession
-        .where(ringcentral_telephony_session_id: event.telephony_session_id)
-        .order(created_at: :asc)
-        .first
+      session =
+        SupportCallSession
+          .where(
+            ringcentral_telephony_session_id:
+              event.telephony_session_id
+          )
+          .order(created_at: :asc)
+          .first
 
       unless session.present?
         return skip!("disconnected_no_matching_session")
@@ -331,7 +379,9 @@ module Ringcentral
       unless session.answered?
         Rails.logger.info(
           "[RingCentral Processor] disconnected unanswered session; " \
-          "no charge scheduled event_id=#{event.id} session_id=#{session.id}"
+          "no charge scheduled " \
+          "event_id=#{event.id} " \
+          "session_id=#{session.id}"
         )
 
         return processed!("disconnected_unanswered_no_charge")
@@ -340,7 +390,9 @@ module Ringcentral
       if session.charged?
         Rails.logger.info(
           "[RingCentral Processor] disconnected already charged session; " \
-          "no new charge scheduled event_id=#{event.id} session_id=#{session.id}"
+          "no new charge scheduled " \
+          "event_id=#{event.id} " \
+          "session_id=#{session.id}"
         )
 
         return processed!("disconnected_already_charged")
@@ -349,26 +401,35 @@ module Ringcentral
       if session.buffer_expires_at.present?
         Rails.logger.info(
           "[RingCentral Processor] disconnected duplicate ignored; " \
-          "reconnect buffer already exists event_id=#{event.id} " \
+          "reconnect buffer already exists " \
+          "event_id=#{event.id} " \
           "session_id=#{session.id} " \
           "buffer_expires_at=#{session.buffer_expires_at}"
         )
 
-        return processed!("disconnected_already_has_reconnect_buffer")
+        return processed!(
+          "disconnected_already_has_reconnect_buffer"
+        )
       end
 
       session.mark_ended_and_start_reconnect_buffer!(
         ringcentral_status: event.status
       )
+
       session.schedule_delayed_charge!
 
       Rails.logger.info(
-        "[RingCentral Processor] answered call ended; delayed charge scheduled " \
-        "event_id=#{event.id} session_id=#{session.id} " \
+        "[RingCentral Processor] answered call ended; " \
+        "delayed charge scheduled " \
+        "event_id=#{event.id} " \
+        "session_id=#{session.id} " \
         "buffer_expires_at=#{session.buffer_expires_at}"
       )
 
-      Ringcentral::SyncBlockedCaller.call(session.user, Time.current)
+      Ringcentral::SyncBlockedCaller.call(
+        session.user,
+        Time.current
+      )
 
       processed!("disconnected_answered_delayed_charge_scheduled")
     end
@@ -380,34 +441,56 @@ module Ringcentral
         status: "allowed_passthrough",
         started_at: Time.current,
         chargeable: false,
-        ringcentral_telephony_session_id: event.telephony_session_id,
-        ringcentral_party_id: event.party_id,
-        ringcentral_status: event.status,
-        caller_phone: event.caller_phone,
-        to_phone: event.to_phone,
-        ringcentral_extension_id: event.extension_id,
-        ringcentral_to_name: event.to_name,
-        ringcentral_raw_payload: event.raw_payload
+        ringcentral_telephony_session_id:
+          event.telephony_session_id,
+        ringcentral_party_id:
+          event.party_id,
+        ringcentral_status:
+          event.status,
+        caller_phone:
+          event.caller_phone,
+        to_phone:
+          event.to_phone,
+        ringcentral_extension_id:
+          event.extension_id,
+        ringcentral_to_name:
+          event.to_name,
+        ringcentral_raw_payload:
+          event.raw_payload
       )
     end
 
-    def create_reconnect_buffer_session!(user, cycle, active_buffer_session)
+    def create_reconnect_buffer_session!(
+      user,
+      cycle,
+      active_buffer_session
+    )
       SupportCallSession.create!(
         user: user,
         support_call_cycle: cycle,
         status: "reconnect_buffer",
         started_at: Time.current,
         chargeable: false,
-        buffer_expires_at: active_buffer_session.buffer_expires_at,
-        failure_reason: "active_reconnect_buffer",
-        ringcentral_telephony_session_id: event.telephony_session_id,
-        ringcentral_party_id: event.party_id,
-        ringcentral_status: event.status,
-        caller_phone: event.caller_phone,
-        to_phone: event.to_phone,
-        ringcentral_extension_id: event.extension_id,
-        ringcentral_to_name: event.to_name,
-        ringcentral_raw_payload: event.raw_payload
+        buffer_expires_at:
+          active_buffer_session.buffer_expires_at,
+        failure_reason:
+          "active_reconnect_buffer",
+        ringcentral_telephony_session_id:
+          event.telephony_session_id,
+        ringcentral_party_id:
+          event.party_id,
+        ringcentral_status:
+          event.status,
+        caller_phone:
+          event.caller_phone,
+        to_phone:
+          event.to_phone,
+        ringcentral_extension_id:
+          event.extension_id,
+        ringcentral_to_name:
+          event.to_name,
+        ringcentral_raw_payload:
+          event.raw_payload
       )
     end
 
@@ -419,29 +502,40 @@ module Ringcentral
         started_at: Time.current,
         chargeable: false,
         blocked_reason: reason,
-        ringcentral_telephony_session_id: event.telephony_session_id,
-        ringcentral_party_id: event.party_id,
-        ringcentral_status: event.status,
-        caller_phone: event.caller_phone,
-        to_phone: event.to_phone,
-        ringcentral_extension_id: event.extension_id,
-        ringcentral_to_name: event.to_name,
-        ringcentral_raw_payload: event.raw_payload
+        ringcentral_telephony_session_id:
+          event.telephony_session_id,
+        ringcentral_party_id:
+          event.party_id,
+        ringcentral_status:
+          event.status,
+        caller_phone:
+          event.caller_phone,
+        to_phone:
+          event.to_phone,
+        ringcentral_extension_id:
+          event.extension_id,
+        ringcentral_to_name:
+          event.to_name,
+        ringcentral_raw_payload:
+          event.raw_payload
       )
     end
 
     def enforce_blocked_call!
-      drop_result = Ringcentral::DropCallSession.call(event)
+      drop_result =
+        Ringcentral::DropCallSession.call(event)
 
       return drop_result if drop_result[:success]
 
       Rails.logger.info(
         "[RingCentral Processor] drop_call_session failed; " \
-        "trying reject_call_party event_id=#{event.id} " \
+        "trying reject_call_party " \
+        "event_id=#{event.id} " \
         "drop_result=#{drop_result.inspect}"
       )
 
-      reject_result = Ringcentral::RejectCallParty.call(event)
+      reject_result =
+        Ringcentral::RejectCallParty.call(event)
 
       {
         success: reject_result[:success],
@@ -461,14 +555,19 @@ module Ringcentral
 
       Rails.logger.info(
         "[RingCentral Processor] passthrough_without_session " \
-        "event_id=#{event.id} reason=#{reason} " \
-        "caller_phone=#{event.caller_phone}"
+        "event_id=#{event.id} " \
+        "reason=#{reason} " \
+        "caller_phone=#{event.caller_phone} " \
+        "to_phone=#{event.to_phone}"
       )
 
       true
     end
 
-    def blocked_without_session!(reason, enforcement_result = nil)
+    def blocked_without_session!(
+      reason,
+      enforcement_result = nil
+    )
       suffix =
         if enforcement_result.nil?
           nil
@@ -478,7 +577,10 @@ module Ringcentral
           "enforcement_failed"
         end
 
-      result = ["blocked_#{reason}", suffix].compact.join("_")
+      result =
+        ["blocked_#{reason}", suffix]
+          .compact
+          .join("_")
 
       event.update!(
         processed: true,
@@ -488,8 +590,10 @@ module Ringcentral
 
       Rails.logger.info(
         "[RingCentral Processor] blocked_without_session " \
-        "event_id=#{event.id} reason=#{reason} " \
+        "event_id=#{event.id} " \
+        "reason=#{reason} " \
         "caller_phone=#{event.caller_phone} " \
+        "to_phone=#{event.to_phone} " \
         "enforcement_result=#{enforcement_result.inspect}"
       )
 
@@ -504,7 +608,9 @@ module Ringcentral
       )
 
       Rails.logger.info(
-        "[RingCentral Processor] processed event_id=#{event.id} result=#{result}"
+        "[RingCentral Processor] processed " \
+        "event_id=#{event.id} " \
+        "result=#{result}"
       )
 
       true
@@ -518,7 +624,9 @@ module Ringcentral
       )
 
       Rails.logger.info(
-        "[RingCentral Processor] skipped event_id=#{event.id} reason=#{reason}"
+        "[RingCentral Processor] skipped " \
+        "event_id=#{event.id} " \
+        "reason=#{reason}"
       )
 
       false
@@ -526,18 +634,22 @@ module Ringcentral
 
     def handle_error(error)
       Rails.logger.error(
-        "[RingCentral Processor] FAILED event_id=#{event.id} " \
+        "[RingCentral Processor] FAILED " \
+        "event_id=#{event.id} " \
         "#{error.class}: #{error.message}"
       )
 
       if error.backtrace.present?
-        Rails.logger.error(error.backtrace.first(10).join("\n"))
+        Rails.logger.error(
+          error.backtrace.first(10).join("\n")
+        )
       end
 
       event.update!(
         processed: true,
         processed_at: Time.current,
-        processing_result: "error_#{error.class.name}"
+        processing_result:
+          "error_#{error.class.name}"
       )
 
       false
