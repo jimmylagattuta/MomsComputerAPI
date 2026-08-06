@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_06_18_203210) do
+ActiveRecord::Schema[7.2].define(version: 2026_07_03_003608) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -222,6 +222,26 @@ ActiveRecord::Schema[7.2].define(version: 2026_06_18_203210) do
     t.datetime "expires_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "ringcentral_subscriptions", force: :cascade do |t|
+    t.string "subscription_id", null: false
+    t.string "status"
+    t.json "event_filters", default: [], null: false
+    t.string "delivery_transport_type"
+    t.string "delivery_address"
+    t.integer "expires_in"
+    t.datetime "expiration_time"
+    t.datetime "creation_time"
+    t.datetime "last_seen_at"
+    t.datetime "last_renewed_at"
+    t.json "raw_payload", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["delivery_address"], name: "index_ringcentral_subscriptions_on_delivery_address"
+    t.index ["expiration_time"], name: "index_ringcentral_subscriptions_on_expiration_time"
+    t.index ["status"], name: "index_ringcentral_subscriptions_on_status"
+    t.index ["subscription_id"], name: "index_ringcentral_subscriptions_on_subscription_id", unique: true
   end
 
   create_table "ringcentral_webhook_events", force: :cascade do |t|
