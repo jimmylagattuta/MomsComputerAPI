@@ -5,33 +5,33 @@ module AskMom
   class Limits
     CONFIG = {
       guest: {
-        messages_per_day: 15,
+        messages_per_day: 3,
         images_per_day: 3,
         images_per_message: 1,
         conversations_per_day: 1,
-        messages_per_conversation: 15,
+        messages_per_conversation: 3,
         chars_per_message: 500,
         burst_messages: 2,
         burst_seconds: 10,
         support_unlocked: false
       },
       signed_in_free: {
-        messages_per_day: 25,
+        messages_per_day: 3,
         images_per_day: 5,
         images_per_message: 1,
         conversations_per_day: 3,
-        messages_per_conversation: 25,
+        messages_per_conversation: 3,
         chars_per_message: 800,
         burst_messages: 3,
         burst_seconds: 10,
         support_unlocked: false
       },
       subscriber: {
-        messages_per_day: 150,
+        messages_per_day: 1_000_000,
         images_per_day: 25,
         images_per_message: 3,
-        conversations_per_day: 20,
-        messages_per_conversation: 100,
+        conversations_per_day: 1_000_000,
+        messages_per_conversation: 1_000_000,
         chars_per_message: 2500,
         burst_messages: 5,
         burst_seconds: 10,
