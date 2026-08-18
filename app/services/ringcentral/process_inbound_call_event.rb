@@ -111,13 +111,19 @@ module Ringcentral
         active_buffer_session = active_reconnect_buffer_session_for(user)
 
         if active_buffer_session.present?
+          forward_result = forward_allowed_call!
+
           create_reconnect_buffer_session!(
             user,
             cycle,
             active_buffer_session
           )
 
-          return processed!("allowed_reconnect_buffer")
+          return processed!(
+            forward_result[:success] ?
+              "allowed_reconnect_buffer_forwarded_to_allo" :
+              "allowed_reconnect_buffer_forward_failed_passthrough"
+          )
         end
 
         session = create_blocked_session!(
@@ -146,8 +152,19 @@ module Ringcentral
         )
       end
 
-      create_allowed_passthrough_session!(user, cycle)
-      processed!("allowed_passthrough_known_user")
+      forward_result = forward_allowed_call!
+
+      create_allowed_passthrough_session!(
+        user,
+        cycle,
+        forwarded: forward_result[:success]
+      )
+
+      processed!(
+        forward_result[:success] ?
+          "allowed_forwarded_to_allo" :
+          "allowed_forward_failed_passthrough"
+      )
     rescue ActiveRecord::RecordInvalid => e
       # RingCentral can deliver duplicate Setup/Proceeding events very close
       # together, especially if duplicate subscriptions exist.
@@ -434,11 +451,11 @@ module Ringcentral
       processed!("disconnected_answered_delayed_charge_scheduled")
     end
 
-    def create_allowed_passthrough_session!(user, cycle)
+    def create_allowed_passthrough_session!(user, cycle, forwarded: false)
       SupportCallSession.create!(
         user: user,
         support_call_cycle: cycle,
-        status: "allowed_passthrough",
+        status: forwarded ? "forwarded" : "allowed_passthrough",
         started_at: Time.current,
         chargeable: false,
         ringcentral_telephony_session_id:
@@ -519,6 +536,32 @@ module Ringcentral
         ringcentral_raw_payload:
           event.raw_payload
       )
+    end
+
+    def forward_allowed_call!
+      result = Ringcentral::ForwardCallParty.call(event)
+
+      Rails.logger.info(
+        "[RingCentral Processor] allowed-call forward result " \
+        "event_id=#{event.id} " \
+        "caller_phone=#{event.caller_phone} " \
+        "to_phone=#{event.to_phone} " \
+        "result=#{result.inspect}"
+      )
+
+      result
+    rescue StandardError => e
+      Rails.logger.error(
+        "[RingCentral Processor] allowed-call forward raised " \
+        "event_id=#{event.id} #{e.class}: #{e.message}"
+      )
+      Rails.logger.error(e.backtrace.first(10).join("\n"))
+
+      {
+        success: false,
+        error_class: e.class.name,
+        error_message: e.message
+      }
     end
 
     def enforce_blocked_call!
