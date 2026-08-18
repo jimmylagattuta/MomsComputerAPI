@@ -3,6 +3,14 @@
 
 module AskMom
   class Limits
+    ACTIVE_SUBSCRIPTION_STATUSES = %w[
+      active
+      trialing
+      paid
+      subscribed
+      cancelled
+    ].freeze
+
     CONFIG = {
       guest: {
         messages_per_day: 3,
@@ -15,6 +23,7 @@ module AskMom
         burst_seconds: 10,
         support_unlocked: false
       },
+
       signed_in_free: {
         messages_per_day: 3,
         images_per_day: 5,
@@ -26,6 +35,7 @@ module AskMom
         burst_seconds: 10,
         support_unlocked: false
       },
+
       subscriber: {
         messages_per_day: 1_000_000,
         images_per_day: 25,
@@ -37,6 +47,7 @@ module AskMom
         burst_seconds: 10,
         support_unlocked: true
       },
+
       admin: {
         messages_per_day: 1000,
         images_per_day: 100,
@@ -61,7 +72,18 @@ module AskMom
     def self.tier_for_user(user)
       return :guest unless user
       return :admin if admin?(user)
-      return :subscriber if subscribed?(user)
+
+      if subscribed?(user)
+        Rails.logger.info(
+          "[AskMom::Limits] tier_decision user_id=#{user.id} tier=subscriber"
+        )
+
+        return :subscriber
+      end
+
+      Rails.logger.info(
+        "[AskMom::Limits] tier_decision user_id=#{user.id} tier=signed_in_free"
+      )
 
       :signed_in_free
     end
@@ -72,23 +94,69 @@ module AskMom
       return true if user.respond_to?(:is_admin) && user.is_admin == true
 
       role = user.respond_to?(:role) ? user.role.to_s : ""
+
       %w[admin super_admin].include?(role)
     end
 
     def self.subscribed?(user)
-      return true if user.respond_to?(:support_subscription_active?) && user.support_subscription_active?
-      return true if user.respond_to?(:subscription_active?) && user.subscription_active?
-      return true if user.respond_to?(:subscribed?) && user.subscribed?
+      subscription = active_revenuecat_subscription(user)
+      entitlement = active_revenuecat_entitlement(user)
 
-      if user.respond_to?(:subscription_status)
-        return true if %w[active trialing].include?(user.subscription_status.to_s)
-      end
+      result = subscription.present? || entitlement.present?
 
-      if user.respond_to?(:status)
-        return true if %w[subscriber active_subscriber].include?(user.status.to_s)
-      end
+      Rails.logger.info(
+        "[AskMom::Limits] subscription_check " \
+        "user_id=#{user.id} " \
+        "subscription_active=#{subscription.present?} " \
+        "subscription_id=#{subscription&.id.inspect} " \
+        "subscription_status=#{subscription&.status.inspect} " \
+        "subscription_period_end=#{subscription&.current_period_end.inspect} " \
+        "entitlement_active=#{entitlement.present?} " \
+        "entitlement_id=#{entitlement&.id.inspect} " \
+        "entitlement_key=#{entitlement&.key.inspect} " \
+        "entitlement_expires_at=#{entitlement&.expires_at.inspect} " \
+        "result=#{result}"
+      )
+
+      result
+    rescue => e
+      Rails.logger.error(
+        "[AskMom::Limits] subscription_check_failed " \
+        "user_id=#{user&.id.inspect} " \
+        "error=#{e.class}: #{e.message}"
+      )
 
       false
     end
+
+    def self.active_revenuecat_subscription(user)
+      return nil unless user.respond_to?(:subscriptions)
+
+      user.subscriptions
+          .where(provider: "revenuecat")
+          .where(status: ACTIVE_SUBSCRIPTION_STATUSES)
+          .where(
+            "current_period_end IS NULL OR current_period_end > ?",
+            Time.current
+          )
+          .order(current_period_end: :desc)
+          .first
+    end
+
+    def self.active_revenuecat_entitlement(user)
+      return nil unless user.respond_to?(:entitlements)
+
+      user.entitlements
+          .where(source: "revenuecat", enabled: true)
+          .where(
+            "expires_at IS NULL OR expires_at > ?",
+            Time.current
+          )
+          .order(expires_at: :desc)
+          .first
+    end
+
+    private_class_method :active_revenuecat_subscription
+    private_class_method :active_revenuecat_entitlement
   end
 end

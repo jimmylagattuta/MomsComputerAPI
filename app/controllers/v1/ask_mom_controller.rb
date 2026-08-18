@@ -459,13 +459,25 @@ module V1
       {
         max_text_chars: limits[:chars_per_message].to_i,
         max_user_per_60s: [limits[:burst_messages].to_i * 6, 1].max,
-        max_llm_calls: limits[:messages_per_conversation].to_i,
-        max_llm_calls_high: limits[:messages_per_conversation].to_i,
+
+        # IMPORTANT:
+        # Product subscription/message limits are handled by AskMom::UsageLimiter
+        # BEFORE Guardrails runs.
+        #
+        # Do not map messages_per_conversation into the LLM safety budget.
+        # Free users only get 3 Ask Mom messages, but that is a product limit,
+        # not a "we're going in circles" safety trigger.
+        max_llm_calls: 40,
+        max_llm_calls_high: 18,
+
         stuck_within_last_user_turns: 10,
         stuck_min_hits: 3,
         repeat_within_last_user_turns: 3,
         repeat_min_matches: 2,
-        show_panel_on_llm_budget: true
+
+        # Hitting an internal LLM safety budget should not advertise
+        # paid support as though the user is stuck.
+        show_panel_on_llm_budget: false
       }
     end
 
