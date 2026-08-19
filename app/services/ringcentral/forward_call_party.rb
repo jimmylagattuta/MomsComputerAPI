@@ -4,8 +4,6 @@ require "ringcentral"
 
 module Ringcentral
   class ForwardCallParty
-    DEFAULT_DESTINATION = "+13109283223"
-
     def self.call(event, destination_phone: nil)
       new(event, destination_phone: destination_phone).call
     end
@@ -15,10 +13,7 @@ module Ringcentral
       @destination_phone =
         normalize_phone(
           destination_phone.presence ||
-          ENV.fetch(
-            "RINGCENTRAL_ALLO_FORWARD_NUMBER",
-            DEFAULT_DESTINATION
-          )
+          ENV["RINGCENTRAL_ALLO_FORWARD_NUMBER"]
         )
     end
 
@@ -79,6 +74,7 @@ module Ringcentral
         "destination_phone=#{destination_phone.inspect} " \
         "#{e.class}: #{e.message}"
       )
+
       Rails.logger.error(e.backtrace.first(10).join("\n"))
 
       {
