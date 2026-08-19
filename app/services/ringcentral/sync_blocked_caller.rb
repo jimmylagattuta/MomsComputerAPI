@@ -17,6 +17,15 @@ module Ringcentral
       return failure!("missing_user") unless user.present?
       return failure!("missing_phone") if normalized_phone.blank?
 
+      if user.support_calls_unlimited?
+        Rails.logger.info(
+          "[RingCentral Sync Blocked Caller] Unlimited support calls; keeping user unblocked " \
+          "user_id=#{user.id} phone=#{normalized_phone}"
+        )
+
+        return Ringcentral::UnblockPhoneNumber.call(normalized_phone)
+      end
+
       cycle = current_cycle
 
       unless cycle.present?

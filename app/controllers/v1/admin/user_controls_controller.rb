@@ -3,7 +3,7 @@ module V1
     class UserControlsController < ApplicationController
       include JwtAuth
 
-      DEFAULT_MONTHLY_CALL_ALLOWANCE = 3
+      DEFAULT_MONTHLY_CALL_ALLOWANCE = 1
 
       before_action :authenticate_user!
       before_action :require_admin!

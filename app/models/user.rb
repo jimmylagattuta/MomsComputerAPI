@@ -37,6 +37,10 @@ class User < ApplicationRecord
     subscriptions.where(status: "active").exists?
   end
 
+  def support_calls_unlimited?
+    %w[admin super_admin].include?(role.to_s) || support_subscription_active?
+  end
+
   def active_devices
     devices.where("last_seen_at > ?", 30.days.ago)
   end

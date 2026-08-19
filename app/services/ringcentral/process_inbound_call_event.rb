@@ -76,10 +76,11 @@ module Ringcentral
       user = find_user_by_phone(event.caller_phone)
 
       # Calls to the separate app/support number should only reach support when
-      # the caller is a known, active, phone-verified, subscribed app user.
+      # the caller is a known, active, phone-verified app user.
       #
-      # Unknown callers should not bypass the app by dialing the restricted
-      # support number directly.
+      # Free users receive one monthly support call. Premium/admin users bypass
+      # the monthly quota entirely. Unknown callers still cannot bypass the app
+      # by dialing the restricted support number directly.
       unless user.present?
         enforcement_result = enforce_blocked_call!
         return blocked_without_session!("unknown_phone", enforcement_result)
@@ -95,11 +96,6 @@ module Ringcentral
         return blocked_without_session!("phone_not_verified", enforcement_result)
       end
 
-      unless user.support_subscription_active?
-        enforcement_result = enforce_blocked_call!
-        return blocked_without_session!("not_subscribed", enforcement_result)
-      end
-
       cycle = current_call_cycle_for(user)
 
       unless cycle.present?
@@ -107,7 +103,7 @@ module Ringcentral
         return blocked_without_session!("no_current_call_cycle", enforcement_result)
       end
 
-      if cycle.calls_used >= cycle.calls_allowed
+      if !user.support_calls_unlimited? && cycle.calls_used >= cycle.calls_allowed
         active_buffer_session = active_reconnect_buffer_session_for(user)
 
         if active_buffer_session.present?
@@ -273,16 +269,7 @@ module Ringcentral
     end
 
     def current_call_cycle_for(user)
-      now = Time.current
-
-      user.support_call_cycles
-        .where(
-          "cycle_start_at <= ? AND cycle_end_at >= ?",
-          now,
-          now
-        )
-        .order(cycle_start_at: :desc)
-        .first
+      user.current_support_call_cycle(Time.current)
     end
 
     def active_reconnect_buffer_session_for(user)

@@ -4,7 +4,7 @@ module V1
 
     before_action :authenticate_user!
 
-    DEFAULT_MONTHLY_CALL_LIMIT = 3
+    DEFAULT_MONTHLY_CALL_LIMIT = 1
 
     def show
       u = current_user
@@ -29,15 +29,16 @@ module V1
         last_seen_at: u.last_seen_at,
         phone_verified_at: u.phone_verified_at,
 
-        # ✅ Backend/Rails premium access for the mobile app gate
+        # âœ… Backend/Rails premium access for the mobile app gate
         support_subscription_active: support_subscription_active_for(u),
+        support_calls_unlimited: call_usage[:support_calls_unlimited],
 
-        # ✅ Call usage fields for the mobile app settings menu
+        # âœ… Call usage fields for the mobile app settings menu
         current_calls_this_month: call_usage[:current_calls_this_month],
         monthly_call_limit: call_usage[:monthly_call_limit],
         calls_left_this_month: call_usage[:calls_left_this_month],
 
-        # ✅ Extra debug-friendly fields
+        # âœ… Extra debug-friendly fields
         active_call_cycle_id: call_usage[:active_call_cycle_id],
         call_cycle_start_at: call_usage[:call_cycle_start_at],
         call_cycle_end_at: call_usage[:call_cycle_end_at]
@@ -47,11 +48,11 @@ module V1
     def destroy
       user = current_user
 
-      Rails.logger.info("🧹 [ME] account deletion requested user_id=#{user.id}")
+      Rails.logger.info("ðŸ§¹ [ME] account deletion requested user_id=#{user.id}")
 
       user.delete_account!
 
-      Rails.logger.info("🧹 [ME] account deleted/anonymized user_id=#{user.id}")
+      Rails.logger.info("ðŸ§¹ [ME] account deleted/anonymized user_id=#{user.id}")
 
       render json: {
         ok: true,
@@ -59,7 +60,7 @@ module V1
       }
     rescue => e
       Rails.logger.error(
-        "❌ [ME] account deletion failed user_id=#{current_user&.id}: #{e.class} - #{e.message}"
+        "âŒ [ME] account deletion failed user_id=#{current_user&.id}: #{e.class} - #{e.message}"
       )
 
       render json: {
@@ -80,7 +81,7 @@ module V1
         false
       end
     rescue => e
-      Rails.logger.error("❌ [ME] support_subscription_active_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+      Rails.logger.error("âŒ [ME] support_subscription_active_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
       false
     end
 
@@ -89,11 +90,13 @@ module V1
 
       active_cycle = active_support_call_cycle_for(user)
 
+      unlimited = support_calls_unlimited_for(user)
+
       calls_allowed =
-        if active_cycle
-          active_cycle.calls_allowed.to_i
-        elsif admin_user?(user)
+        if unlimited
           999
+        elsif active_cycle
+          active_cycle.calls_allowed.to_i
         else
           DEFAULT_MONTHLY_CALL_LIMIT
         end
@@ -108,19 +111,20 @@ module V1
       calls_left = [calls_allowed - calls_used, 0].max
 
       Rails.logger.info(
-        "📞 [ME] call usage payload user_id=#{user.id} cycle_id=#{active_cycle&.id} calls_used=#{calls_used} calls_allowed=#{calls_allowed} calls_left=#{calls_left}"
+        "ðŸ“ž [ME] call usage payload user_id=#{user.id} cycle_id=#{active_cycle&.id} calls_used=#{calls_used} calls_allowed=#{calls_allowed} calls_left=#{calls_left}"
       )
 
       {
         current_calls_this_month: calls_used,
         monthly_call_limit: calls_allowed,
+        support_calls_unlimited: unlimited,
         calls_left_this_month: calls_left,
         active_call_cycle_id: active_cycle&.id,
         call_cycle_start_at: active_cycle&.cycle_start_at,
         call_cycle_end_at: active_cycle&.cycle_end_at
       }
     rescue => e
-      Rails.logger.error("❌ [ME] call_usage_payload_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+      Rails.logger.error("âŒ [ME] call_usage_payload_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
       default_call_usage_payload
     end
 
@@ -133,7 +137,7 @@ module V1
         .order(cycle_start_at: :desc)
         .first
     rescue => e
-      Rails.logger.error("❌ [ME] active_support_call_cycle_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+      Rails.logger.error("âŒ [ME] active_support_call_cycle_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
       nil
     end
 
@@ -142,10 +146,18 @@ module V1
         current_calls_this_month: 0,
         monthly_call_limit: DEFAULT_MONTHLY_CALL_LIMIT,
         calls_left_this_month: DEFAULT_MONTHLY_CALL_LIMIT,
+        support_calls_unlimited: false,
         active_call_cycle_id: nil,
         call_cycle_start_at: nil,
         call_cycle_end_at: nil
       }
+    end
+
+    def support_calls_unlimited_for(user)
+      return false unless user
+      return user.support_calls_unlimited? if user.respond_to?(:support_calls_unlimited?)
+
+      admin_user?(user) || support_subscription_active_for(user)
     end
 
     def admin_user?(user)

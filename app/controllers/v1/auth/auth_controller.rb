@@ -5,7 +5,7 @@ module V1
 
       before_action :authenticate_user!, only: [:logout, :change_password]
 
-      DEFAULT_MONTHLY_CALL_LIMIT = 3
+      DEFAULT_MONTHLY_CALL_LIMIT = 1
 
       def signup
         permitted = signup_params
@@ -16,7 +16,7 @@ module V1
           phone: permitted[:phone]
         )
           Rails.logger.info(
-            "📱 [AUTH] signup blocked: missing/invalid phone verification token phone=#{permitted[:phone].inspect} email=#{permitted[:email].inspect}"
+            "ðŸ“± [AUTH] signup blocked: missing/invalid phone verification token phone=#{permitted[:phone].inspect} email=#{permitted[:email].inspect}"
           )
 
           return render json: {
@@ -34,7 +34,7 @@ module V1
           begin
             UserMailer.welcome_email(user).deliver_later
           rescue => e
-            Rails.logger.error("❌ [AUTH] welcome email failed for user_id=#{user.id}: #{e.class} - #{e.message}")
+            Rails.logger.error("âŒ [AUTH] welcome email failed for user_id=#{user.id}: #{e.class} - #{e.message}")
           end
 
           token = jwt_for(user)
@@ -51,7 +51,7 @@ module V1
         user = User.find_by(email: login_params[:email]&.downcase)
 
         if user&.deleted?
-          Rails.logger.info("🔒 [AUTH] deleted account login blocked user_id=#{user.id}")
+          Rails.logger.info("ðŸ”’ [AUTH] deleted account login blocked user_id=#{user.id}")
           return render json: { error: "invalid_credentials" }, status: :unauthorized
         end
 
@@ -83,7 +83,7 @@ module V1
           expires_at: Time.at(exp)
         )
 
-        Rails.logger.info "🔒 [AUTH] logout revoked jti=#{jti} user_id=#{payload['user_id']}"
+        Rails.logger.info "ðŸ”’ [AUTH] logout revoked jti=#{jti} user_id=#{payload['user_id']}"
 
         render json: { ok: true }
       rescue ActiveRecord::RecordNotUnique
@@ -92,11 +92,11 @@ module V1
 
       def change_password
         Rails.logger.info(
-          "🔑 [AUTH] change_password user_id=#{current_user&.id} current_present=#{change_password_params[:current_password].present?} new_present=#{change_password_params[:password].present?} confirm_present=#{change_password_params[:password_confirmation].present?}"
+          "ðŸ”‘ [AUTH] change_password user_id=#{current_user&.id} current_present=#{change_password_params[:current_password].present?} new_present=#{change_password_params[:password].present?} confirm_present=#{change_password_params[:password_confirmation].present?}"
         )
 
         unless current_user.authenticate(change_password_params[:current_password])
-          Rails.logger.info("🔑 [AUTH] current password check failed for user_id=#{current_user&.id}")
+          Rails.logger.info("ðŸ”‘ [AUTH] current password check failed for user_id=#{current_user&.id}")
 
           return render json: {
             error: "invalid_current_password",
@@ -105,7 +105,7 @@ module V1
         end
 
         if change_password_params[:current_password] == change_password_params[:password]
-          Rails.logger.info("🔑 [AUTH] new password matched current password for user_id=#{current_user&.id}")
+          Rails.logger.info("ðŸ”‘ [AUTH] new password matched current password for user_id=#{current_user&.id}")
 
           return render json: {
             error: "password_unchanged",
@@ -117,7 +117,7 @@ module V1
           password: change_password_params[:password],
           password_confirmation: change_password_params[:password_confirmation]
         )
-          Rails.logger.info("🔑 [AUTH] password updated for user_id=#{current_user&.id}")
+          Rails.logger.info("ðŸ”‘ [AUTH] password updated for user_id=#{current_user&.id}")
 
           render json: {
             ok: true,
@@ -125,7 +125,7 @@ module V1
           }
         else
           Rails.logger.info(
-            "🔑 [AUTH] password update validation failed for user_id=#{current_user&.id}: #{current_user.errors.full_messages.join(', ')}"
+            "ðŸ”‘ [AUTH] password update validation failed for user_id=#{current_user&.id}: #{current_user.errors.full_messages.join(', ')}"
           )
 
           render json: {
@@ -196,15 +196,16 @@ module V1
           last_seen_at: user.last_seen_at,
           phone_verified_at: user.phone_verified_at,
 
-          # ✅ Backend/Rails premium access for the mobile app gate
+          # âœ… Backend/Rails premium access for the mobile app gate
           support_subscription_active: support_subscription_active_for(user),
+          support_calls_unlimited: call_usage[:support_calls_unlimited],
 
-          # ✅ Call usage fields for the mobile app settings menu
+          # âœ… Call usage fields for the mobile app settings menu
           current_calls_this_month: call_usage[:current_calls_this_month],
           monthly_call_limit: call_usage[:monthly_call_limit],
           calls_left_this_month: call_usage[:calls_left_this_month],
 
-          # ✅ Extra debug-friendly fields
+          # âœ… Extra debug-friendly fields
           active_call_cycle_id: call_usage[:active_call_cycle_id],
           call_cycle_start_at: call_usage[:call_cycle_start_at],
           call_cycle_end_at: call_usage[:call_cycle_end_at]
@@ -235,7 +236,7 @@ module V1
       rescue ActiveSupport::MessageVerifier::InvalidSignature
         false
       rescue => e
-        Rails.logger.error("❌ [AUTH] phone verification token check failed: #{e.class} - #{e.message}")
+        Rails.logger.error("âŒ [AUTH] phone verification token check failed: #{e.class} - #{e.message}")
         false
       end
 
@@ -257,7 +258,7 @@ module V1
           false
         end
       rescue => e
-        Rails.logger.error("❌ [AUTH] support_subscription_active_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("âŒ [AUTH] support_subscription_active_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
         false
       end
 
@@ -266,11 +267,13 @@ module V1
 
         active_cycle = active_support_call_cycle_for(user)
 
+        unlimited = support_calls_unlimited_for(user)
+
         calls_allowed =
-          if active_cycle
-            active_cycle.calls_allowed.to_i
-          elsif admin_user?(user)
+          if unlimited
             999
+          elsif active_cycle
+            active_cycle.calls_allowed.to_i
           else
             DEFAULT_MONTHLY_CALL_LIMIT
           end
@@ -286,20 +289,21 @@ module V1
 
         if ENV["DEBUG_AUTH_USAGE"] == "true"
           Rails.logger.info(
-            "📞 [AUTH] call usage payload user_id=#{user.id} cycle_id=#{active_cycle&.id} calls_used=#{calls_used} calls_allowed=#{calls_allowed} calls_left=#{calls_left}"
+            "ðŸ“ž [AUTH] call usage payload user_id=#{user.id} cycle_id=#{active_cycle&.id} calls_used=#{calls_used} calls_allowed=#{calls_allowed} calls_left=#{calls_left}"
           )
         end
 
         {
           current_calls_this_month: calls_used,
           monthly_call_limit: calls_allowed,
+          support_calls_unlimited: unlimited,
           calls_left_this_month: calls_left,
           active_call_cycle_id: active_cycle&.id,
           call_cycle_start_at: active_cycle&.cycle_start_at,
           call_cycle_end_at: active_cycle&.cycle_end_at
         }
       rescue => e
-        Rails.logger.error("❌ [AUTH] call_usage_payload_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("âŒ [AUTH] call_usage_payload_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
         default_call_usage_payload
       end
 
@@ -312,7 +316,7 @@ module V1
           .order(cycle_start_at: :desc)
           .first
       rescue => e
-        Rails.logger.error("❌ [AUTH] active_support_call_cycle_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("âŒ [AUTH] active_support_call_cycle_for failed user_id=#{user&.id}: #{e.class} - #{e.message}")
         nil
       end
 
@@ -321,10 +325,18 @@ module V1
           current_calls_this_month: 0,
           monthly_call_limit: DEFAULT_MONTHLY_CALL_LIMIT,
           calls_left_this_month: DEFAULT_MONTHLY_CALL_LIMIT,
+          support_calls_unlimited: false,
           active_call_cycle_id: nil,
           call_cycle_start_at: nil,
           call_cycle_end_at: nil
         }
+      end
+
+      def support_calls_unlimited_for(user)
+        return false unless user
+        return user.support_calls_unlimited? if user.respond_to?(:support_calls_unlimited?)
+
+        admin_user?(user) || support_subscription_active_for(user)
       end
 
       def admin_user?(user)

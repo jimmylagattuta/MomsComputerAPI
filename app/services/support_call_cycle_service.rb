@@ -1,5 +1,5 @@
 class SupportCallCycleService
-  DEFAULT_CALLS_ALLOWED = 3
+  DEFAULT_CALLS_ALLOWED = 1
 
   def self.current_cycle_for(user, time = Time.current)
     existing_cycle = user

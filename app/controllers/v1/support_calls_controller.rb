@@ -13,15 +13,15 @@ class V1::SupportCallsController < ApplicationController
 
     if active_buffer_session.present?
       Rails.logger.info(
-        "📞 [SUPPORT CALL] active reconnect buffer found " \
+        "ðŸ“ž [SUPPORT CALL] active reconnect buffer found " \
         "user_id=#{user.id} session_id=#{active_buffer_session.id} " \
         "buffer_expires_at=#{active_buffer_session.buffer_expires_at}"
       )
-    elsif !cycle.has_calls_remaining?
+    elsif !user.support_calls_unlimited? && !cycle.has_calls_remaining?
       sync_ringcentral_block_for_user(user)
 
       Rails.logger.info(
-        "📞 [SUPPORT CALL] blocked monthly limit reached " \
+        "ðŸ“ž [SUPPORT CALL] blocked monthly limit reached " \
         "user_id=#{user.id} calls_used=#{cycle.calls_used} " \
         "calls_allowed=#{cycle.calls_allowed} calls_remaining=#{cycle.calls_remaining}"
       )
@@ -33,6 +33,7 @@ class V1::SupportCallsController < ApplicationController
         calls_allowed: cycle.calls_allowed,
         calls_used: cycle.calls_used,
         calls_remaining: cycle.calls_remaining,
+        calls_unlimited: false,
         reconnect_buffer_active: false,
         buffer_expires_at: nil,
         renews_at: cycle.cycle_end_at
@@ -42,7 +43,7 @@ class V1::SupportCallsController < ApplicationController
     user_phone_number = normalized_user_phone_number(user)
 
     Rails.logger.info(
-      "📞 [SUPPORT CALL] authorization requested " \
+      "ðŸ“ž [SUPPORT CALL] authorization requested " \
       "user_id=#{user.id} user_phone_number=#{user_phone_number.inspect} " \
       "calls_used=#{cycle.calls_used} calls_allowed=#{cycle.calls_allowed} " \
       "calls_remaining=#{cycle.calls_remaining} reconnect_buffer=#{active_buffer_session.present?}"
@@ -56,6 +57,7 @@ class V1::SupportCallsController < ApplicationController
         calls_allowed: cycle.calls_allowed,
         calls_used: cycle.calls_used,
         calls_remaining: cycle.calls_remaining,
+        calls_unlimited: user.support_calls_unlimited?,
         reconnect_buffer_active: active_buffer_session.present?,
         buffer_expires_at: active_buffer_session&.buffer_expires_at,
         renews_at: cycle.cycle_end_at
@@ -75,7 +77,7 @@ class V1::SupportCallsController < ApplicationController
     )
 
     Rails.logger.info(
-      "📞 [SUPPORT CALL] authorization session created " \
+      "ðŸ“ž [SUPPORT CALL] authorization session created " \
       "session_id=#{support_call_session.id} user_id=#{user.id} " \
       "status=#{support_call_session.status} reconnect_buffer=#{active_buffer_session.present?} " \
       "call_number=#{RINGCENTRAL_SUPPORT_NUMBER}"
@@ -83,19 +85,20 @@ class V1::SupportCallsController < ApplicationController
 
     render json: {
       success: true,
-      message: authorization_message(cycle, active_buffer_session),
+      message: authorization_message(user, cycle, active_buffer_session),
       call_number: RINGCENTRAL_SUPPORT_NUMBER,
       support_call_session_id: support_call_session.id,
       calls_allowed: cycle.calls_allowed,
       calls_used: cycle.calls_used,
       calls_remaining: cycle.calls_remaining,
+      calls_unlimited: user.support_calls_unlimited?,
       reconnect_buffer_active: active_buffer_session.present?,
       buffer_expires_at: active_buffer_session&.buffer_expires_at,
       renews_at: cycle.cycle_end_at
     }, status: :ok
   rescue StandardError => e
     Rails.logger.error(
-      "📞 [SUPPORT CALL] authorization error " \
+      "ðŸ“ž [SUPPORT CALL] authorization error " \
       "#{e.class}: #{e.message}"
     )
     Rails.logger.error(e.backtrace.first(10).join("\n"))
@@ -115,8 +118,10 @@ class V1::SupportCallsController < ApplicationController
       .first
   end
 
-  def authorization_message(cycle, active_buffer_session)
-    if active_buffer_session.present?
+  def authorization_message(user, cycle, active_buffer_session)
+    if user.support_calls_unlimited?
+      "Unlimited support calls are active for your account."
+    elsif active_buffer_session.present?
       "Reconnect window active. This call will not count as a new monthly call if it connects during the buffer."
     elsif cycle.calls_remaining == 1
       "You have 1 support call remaining this month."
@@ -135,14 +140,14 @@ class V1::SupportCallsController < ApplicationController
     result = Ringcentral::SyncAllowedCaller.call(user)
 
     Rails.logger.info(
-      "📞 [SUPPORT CALL] RingCentral allow sync complete " \
+      "ðŸ“ž [SUPPORT CALL] RingCentral allow sync complete " \
       "user_id=#{user.id} result=#{result.inspect}"
     )
 
     result
   rescue StandardError => e
     Rails.logger.error(
-      "📞 [SUPPORT CALL] RingCentral allow sync failed " \
+      "ðŸ“ž [SUPPORT CALL] RingCentral allow sync failed " \
       "user_id=#{user.id} #{e.class}: #{e.message}"
     )
     Rails.logger.error(e.backtrace.first(10).join("\n"))
@@ -156,14 +161,14 @@ class V1::SupportCallsController < ApplicationController
     result = Ringcentral::SyncBlockedCaller.call(user)
 
     Rails.logger.info(
-      "📞 [SUPPORT CALL] RingCentral block sync complete " \
+      "ðŸ“ž [SUPPORT CALL] RingCentral block sync complete " \
       "user_id=#{user.id} result=#{result.inspect}"
     )
 
     result
   rescue StandardError => e
     Rails.logger.error(
-      "📞 [SUPPORT CALL] RingCentral block sync failed " \
+      "ðŸ“ž [SUPPORT CALL] RingCentral block sync failed " \
       "user_id=#{user.id} #{e.class}: #{e.message}"
     )
     Rails.logger.error(e.backtrace.first(10).join("\n"))
