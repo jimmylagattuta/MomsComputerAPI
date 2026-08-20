@@ -24,7 +24,18 @@ module V1
         }, status: request_guard.status
       end
 
-      limits = AskMom::Limits.for_guest
+      anonymous_subscriber =
+        Revenuecat::AnonymousSubscriptionActive.call(guest_id: guest_id)
+
+      tier = anonymous_subscriber ? :subscriber : :guest
+      limits = AskMom::Limits::CONFIG.fetch(tier)
+
+      Rails.logger.info(
+        "[PUBLIC_ASK_MOM] guest_subscription_check " \
+        "guest_id_digest=#{Digest::SHA256.hexdigest(guest_id)} " \
+        "tier=#{tier} " \
+        "anonymous_subscriber=#{anonymous_subscriber}"
+      )
 
       # Use a stable server-side digest for cache keys instead of the raw guest_id.
       # This keeps guest IDs out of cache keys/log-ish places while preserving
@@ -33,7 +44,7 @@ module V1
 
       limiter = AskMom::UsageLimiter.new(
         actor_key: "guest:#{guest_key}",
-        tier: :guest,
+        tier: tier,
         limits: limits,
         conversation_key: "guest:#{guest_key}:public"
       )

@@ -43,7 +43,21 @@ module V1
 
         link.guest_id = guest_id
         link.original_app_user_id = original_app_user_id
-        link.status = link.user_id.present? ? "linked" : "pending"
+
+        # Do not downgrade webhook-derived subscription state.
+        #
+        # RevenueCat may already have changed this record to:
+        #   anonymous_active
+        #   anonymous_cancelled
+        #   anonymous_expired
+        #   anonymous_billing_issue
+        #
+        # The remember endpoint's job is only to associate the device guest_id
+        # with the anonymous RevenueCat customer. It must not overwrite the
+        # authoritative status written by RevenuecatWebhookProcessor.
+        if link.status.blank?
+          link.status = link.user_id.present? ? "linked" : "pending"
+        end
 
         # Optional fields if your model/table has them.
         assign_if_column_exists(link, :last_seen_at, Time.current)
@@ -126,8 +140,7 @@ module V1
         })
 
         # Reuse your existing link endpoint logic.
-        # This is intentionally simple:
-        # after attaching by guest_id, run the same backend verification path
+        # After attaching by guest_id, run the same backend verification path
         # using the saved anonymous RevenueCat app_user_id.
         result = link_revenuecat_customer_to_current_user(link.app_user_id)
 
@@ -156,6 +169,7 @@ module V1
 
       def assign_if_column_exists(record, column_name, value)
         return unless record.respond_to?("#{column_name}=")
+
         record.public_send("#{column_name}=", value)
       end
 
@@ -165,10 +179,6 @@ module V1
         Rails.logger.info("[RC_GUEST] #{event} #{payload.to_json}")
       end
 
-      # This calls the same service/path your existing /link_customer controller uses.
-      #
-      # If your CustomersController already has this logic inline instead of a service,
-      # we will move that logic into a small service next.
       def link_revenuecat_customer_to_current_user(app_user_id)
         linker = ::Revenuecat::CustomerLinker.new(
           user: current_user,
