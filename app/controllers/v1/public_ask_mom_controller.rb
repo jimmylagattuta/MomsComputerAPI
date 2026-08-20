@@ -25,7 +25,7 @@ module V1
       end
 
       anonymous_subscriber =
-        Revenuecat::AnonymousSubscriptionActive.call(guest_id: guest_id)
+        ::Revenuecat::AnonymousSubscriptionActive.call(guest_id: guest_id)
 
       tier = anonymous_subscriber ? :subscriber : :guest
       limits = AskMom::Limits::CONFIG.fetch(tier)
