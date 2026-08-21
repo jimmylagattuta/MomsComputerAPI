@@ -47,6 +47,20 @@ module Ringcentral
       return skip!("missing_party_id") if event.party_id.blank?
       return skip!("missing_caller_phone") if event.caller_phone.blank?
 
+      # RingCentral creates a new inbound leg after we blind-transfer the
+      # customer's call to Allo. That leg is already at the final destination,
+      # so never try to forward it to Allo again.
+      if normalize_phone(event.to_phone) == "+13233002055"
+        Rails.logger.info(
+          "[RingCentral Processor] skipping already-forwarded Allo leg " \
+          "event_id=#{event.id} " \
+          "caller_phone=#{event.caller_phone} " \
+          "to_phone=#{event.to_phone}"
+        )
+
+        return skip!("already_forwarded_to_allo")
+      end
+
       # The main Mom's Computer company number is a public destination.
       # Anyone calling this number should pass through normally.
       #
