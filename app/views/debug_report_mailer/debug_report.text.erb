@@ -1,0 +1,43 @@
+Mom's Computer Debug Report
+============================
+
+Report ID: <%= @report_id %>
+Received: <%= @request_meta[:received_at] %>
+Generated: <%= @report["generatedAt"] %>
+Request ID: <%= @request_meta[:request_id] %>
+
+ACCOUNT
+-------
+Signed in: <%= @account["signedIn"].inspect %>
+User ID: <%= @user["id"] %>
+Email: <%= @user["email"] %>
+Role: <%= @user["role"] %>
+
+DEVICE
+------
+Platform: <%= @device["platform"] %> <%= @device["platformVersion"] %>
+Device: <%= @device["deviceName"] || @device["modelName"] %>
+Manufacturer: <%= @device["manufacturer"] %>
+OS: <%= @device["osName"] %> <%= @device["osVersion"] %>
+
+APP
+---
+Version: <%= @app["nativeApplicationVersion"] || @app["expoAppVersion"] %>
+Build: <%= @app["nativeBuildVersion"] %>
+Application ID: <%= @app["applicationId"] %>
+
+REVENUECAT
+----------
+App User ID: <%= @revenuecat["appUserId"] %>
+Expected entitlement: <%= @revenuecat["expectedEntitlementId"] %>
+Expected Android subscription: <%= @revenuecat["expectedAndroidSubscriptionId"] %>
+Expected Android store product: <%= @revenuecat["expectedAndroidStoreProductId"] %>
+Expected Android base plan: <%= @revenuecat["expectedAndroidBasePlanId"] %>
+
+SERVER REQUEST
+--------------
+Remote IP: <%= @request_meta[:remote_ip] %>
+User Agent: <%= @request_meta[:user_agent] %>
+
+The complete sanitized report is attached as:
+<%= @report_id %>.json

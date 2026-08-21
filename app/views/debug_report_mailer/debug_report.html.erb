@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial, sans-serif; color: #10203A; line-height: 1.45;">
+    <h2>Mom's Computer Debug Report</h2>
+
+    <p>
+      <strong>Report ID:</strong> <%= @report_id %><br>
+      <strong>Received:</strong> <%= @request_meta[:received_at] %><br>
+      <strong>Generated:</strong> <%= @report["generatedAt"] %><br>
+      <strong>Request ID:</strong> <%= @request_meta[:request_id] %>
+    </p>
+
+    <h3>Account</h3>
+
+    <p>
+      <strong>Signed in:</strong> <%= @account["signedIn"].inspect %><br>
+      <strong>User ID:</strong> <%= @user["id"] %><br>
+      <strong>Email:</strong> <%= @user["email"] %><br>
+      <strong>Role:</strong> <%= @user["role"] %>
+    </p>
+
+    <h3>Device</h3>
+
+    <p>
+      <strong>Platform:</strong>
+      <%= @device["platform"] %>
+      <%= @device["platformVersion"] %>
+      <br>
+
+      <strong>Device:</strong>
+      <%= @device["deviceName"] || @device["modelName"] %>
+      <br>
+
+      <strong>Manufacturer:</strong>
+      <%= @device["manufacturer"] %>
+      <br>
+
+      <strong>OS:</strong>
+      <%= @device["osName"] %>
+      <%= @device["osVersion"] %>
+    </p>
+
+    <h3>App</h3>
+
+    <p>
+      <strong>Version:</strong>
+      <%= @app["nativeApplicationVersion"] || @app["expoAppVersion"] %>
+      <br>
+
+      <strong>Build:</strong>
+      <%= @app["nativeBuildVersion"] %>
+      <br>
+
+      <strong>Application ID:</strong>
+      <%= @app["applicationId"] %>
+    </p>
+
+    <h3>RevenueCat</h3>
+
+    <p>
+      <strong>App User ID:</strong>
+      <%= @revenuecat["appUserId"] %>
+      <br>
+
+      <strong>Expected entitlement:</strong>
+      <%= @revenuecat["expectedEntitlementId"] %>
+      <br>
+
+      <strong>Android subscription:</strong>
+      <%= @revenuecat["expectedAndroidSubscriptionId"] %>
+      <br>
+
+      <strong>Store product:</strong>
+      <%= @revenuecat["expectedAndroidStoreProductId"] %>
+      <br>
+
+      <strong>Base plan:</strong>
+      <%= @revenuecat["expectedAndroidBasePlanId"] %>
+    </p>
+
+    <h3>Server Request</h3>
+
+    <p>
+      <strong>Remote IP:</strong>
+      <%= @request_meta[:remote_ip] %>
+      <br>
+
+      <strong>User Agent:</strong>
+      <%= @request_meta[:user_agent] %>
+    </p>
+
+    <p>
+      <strong>
+        Complete sanitized diagnostics are attached as
+        <code><%= @report_id %>.json</code>.
+      </strong>
+    </p>
+  </body>
+</html>

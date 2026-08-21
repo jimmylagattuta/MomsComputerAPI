@@ -31,6 +31,10 @@ Rails.application.routes.draw do
 
     post "devices/register", to: "devices#register"
 
+    # Frontend diagnostic reports from Paywall / subscription debugging.
+    # Works for both signed-in users and guests.
+    post "debug_reports", to: "debug_reports#create"
+
     resources :support_calls, only: [:create]
 
     get  "support_text_thread", to: "support_text_threads#current"
